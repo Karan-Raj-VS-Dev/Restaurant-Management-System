@@ -1,0 +1,6 @@
+@import "../../restaurant-ui/src/styles.css";
+
+.inventory-theme {
+  --rm-primary: #245460;
+  --rm-primary-deep: #9a2f2f;
+}

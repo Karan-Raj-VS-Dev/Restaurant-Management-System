@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980" role="img" aria-labelledby="title desc">
+  <title id="title">Restaurant Main Dine-In Flow</title>
+  <desc id="desc">Flowchart for the restaurant dine-in process from arrival to table reset.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f7f3eb; }
+      .title { font: 700 30px Arial, sans-serif; fill: #1f2937; }
+      .subtitle { font: 400 15px Arial, sans-serif; fill: #475569; }
+      .step { fill: #fffdf8; stroke: #0f766e; stroke-width: 2.5; rx: 18; ry: 18; }
+      .step-alt { fill: #fef7ed; stroke: #c2410c; stroke-width: 2.5; rx: 18; ry: 18; }
+      .decision { fill: #eff6ff; stroke: #1d4ed8; stroke-width: 2.5; }
+      .note { fill: #f8fafc; stroke: #64748b; stroke-width: 2; rx: 14; ry: 14; }
+      .label { font: 700 15px Arial, sans-serif; fill: #0f172a; text-anchor: middle; }
+      .body { font: 400 13px Arial, sans-serif; fill: #334155; text-anchor: middle; }
+      .small { font: 700 12px Arial, sans-serif; fill: #1d4ed8; text-anchor: middle; }
+      .arrow { stroke: #334155; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+      .loop { stroke: #c2410c; stroke-width: 3; fill: none; marker-end: url(#arrowheadAlt); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155"/>
+    </marker>
+    <marker id="arrowheadAlt" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c2410c"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1600" height="980"/>
+  <text class="title" x="800" y="56" text-anchor="middle">Restaurant Main Dine-In Flow</text>
+  <text class="subtitle" x="800" y="84" text-anchor="middle">Customer journey, waiter workflow, kitchen preparation, billing, payment, review, and table reset</text>
+
+  <rect class="step" x="80" y="150" width="220" height="90"/>
+  <text class="label" x="190" y="185">1. Customer Arrives</text>
+  <text class="body" x="190" y="210">Guest enters the restaurant</text>
+  <text class="body" x="190" y="228">and asks for a table</text>
+
+  <rect class="step" x="360" y="150" width="220" height="90"/>
+  <text class="label" x="470" y="185">2. Assign Table</text>
+  <text class="body" x="470" y="210">Host or waiter allocates</text>
+  <text class="body" x="470" y="228">an available table</text>
+
+  <rect class="step" x="640" y="150" width="220" height="90"/>
+  <text class="label" x="750" y="185">3. Stock-Aware Menu</text>
+  <text class="body" x="750" y="210">Show only dishes whose</text>
+  <text class="body" x="750" y="228">ingredients are available</text>
+
+  <rect class="step" x="920" y="150" width="220" height="90"/>
+  <text class="label" x="1030" y="185">4. Create Order</text>
+  <text class="body" x="1030" y="210">Waiter sends the dine-in</text>
+  <text class="body" x="1030" y="228">order to the order service</text>
+
+  <rect class="step" x="1200" y="150" width="220" height="90"/>
+  <text class="label" x="1310" y="185">5. Reserve Ingredients</text>
+  <text class="body" x="1310" y="210">Inventory reserves stock</text>
+  <text class="body" x="1310" y="228">required by recipes</text>
+
+  <path class="arrow" d="M 300 195 L 360 195"/>
+  <path class="arrow" d="M 580 195 L 640 195"/>
+  <path class="arrow" d="M 860 195 L 920 195"/>
+  <path class="arrow" d="M 1140 195 L 1200 195"/>
+
+  <polygon class="decision" points="1310,325 1410,395 1310,465 1210,395"/>
+  <text class="label" x="1310" y="390">6. Stock Available?</text>
+  <text class="small" x="1390" y="380">Yes</text>
+  <text class="small" x="1165" y="390">No</text>
+
+  <path class="arrow" d="M 1310 240 L 1310 325"/>
+
+  <rect class="note" x="880" y="350" width="220" height="90"/>
+  <text class="label" x="990" y="385">Revise Order</text>
+  <text class="body" x="990" y="410">Waiter suggests alternatives</text>
+  <text class="body" x="990" y="428">or removes unavailable items</text>
+
+  <path class="loop" d="M 1210 395 L 1100 395"/>
+  <path class="loop" d="M 990 350 L 990 285 L 750 285 L 750 240"/>
+
+  <rect class="step-alt" x="1200" y="540" width="220" height="90"/>
+  <text class="label" x="1310" y="575">7. Prepare Food</text>
+  <text class="body" x="1310" y="600">Kitchen receives ticket</text>
+  <text class="body" x="1310" y="618">and cooks the dishes</text>
+
+  <path class="arrow" d="M 1310 465 L 1310 540"/>
+
+  <rect class="step-alt" x="920" y="540" width="220" height="90"/>
+  <text class="label" x="1030" y="575">8. Serve Food</text>
+  <text class="body" x="1030" y="600">Waiter picks up ready food</text>
+  <text class="body" x="1030" y="618">and serves the customer</text>
+
+  <path class="arrow" d="M 1200 585 L 1140 585"/>
+
+  <rect class="step" x="640" y="540" width="220" height="90"/>
+  <text class="label" x="750" y="575">9. Finalize Bill</text>
+  <text class="body" x="750" y="600">Billing service calculates</text>
+  <text class="body" x="750" y="618">the final payable amount</text>
+
+  <path class="arrow" d="M 920 585 L 860 585"/>
+
+  <rect class="step" x="360" y="540" width="220" height="90"/>
+  <text class="label" x="470" y="575">10. Process Payment</text>
+  <text class="body" x="470" y="600">Payment service confirms</text>
+  <text class="body" x="470" y="618">cash, card, or digital pay</text>
+
+  <path class="arrow" d="M 640 585 L 580 585"/>
+
+  <rect class="step" x="80" y="540" width="220" height="90"/>
+  <text class="label" x="190" y="575">11. Collect Review</text>
+  <text class="body" x="190" y="600">Send feedback request for</text>
+  <text class="body" x="190" y="618">food and service quality</text>
+
+  <path class="arrow" d="M 360 585 L 300 585"/>
+
+  <rect class="step" x="80" y="760" width="220" height="90"/>
+  <text class="label" x="190" y="795">12. Clean And Reset</text>
+  <text class="body" x="190" y="820">Table is marked for cleaning</text>
+  <text class="body" x="190" y="838">and reopened for next guests</text>
+
+  <path class="arrow" d="M 190 630 L 190 760"/>
+
+  <rect class="note" x="420" y="748" width="700" height="116"/>
+  <text class="label" x="770" y="784">Main Services Involved</text>
+  <text class="body" x="770" y="812">table-service, employee-service, catalog-service, inventory-service, order-service, kitchen-service</text>
+  <text class="body" x="770" y="834">billing-service, payment-service, review-feedback-service, audit-timeline-service, operations-insights-service</text>
+  <text class="body" x="770" y="856">All services emit events and persist into the unified restaurantManagementSystem database using dedicated schemas.</text>
+</svg>

@@ -1,0 +1,15 @@
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/DailyOperationsInsight.java
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/DailySnapshot.java
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/InternalEventController.java
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/OperationsInsightsController.java
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/OperationsInsightsProjection.java
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/OperationsInsightsService.java
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/OperationsInsightsServiceApplication.java
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/StockHealthView.java
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/StockInsight.java
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/config/EventingConfiguration.java
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/event/OperationsInsightsEventListener.java
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/persistence/entity/DailyOperationsInsightEntity.java
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/persistence/entity/StockInsightEntity.java
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/persistence/repository/DailyOperationsInsightRepository.java
+/Users/vkaran/Documents/New project/restaurant-management-system/services/operations-insights-service/src/main/java/com/restaurant/insights/persistence/repository/StockInsightRepository.java

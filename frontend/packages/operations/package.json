@@ -1,0 +1,17 @@
+{
+  "name": "@restaurant/operations",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "dependencies": {
+    "@restaurant/api": "0.0.1",
+    "@restaurant/ui": "0.0.1",
+    "react": "^18.3.1"
+  },
+  "peerDependencies": {
+    "react-dom": "^18.3.1"
+  }
+}

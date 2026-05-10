@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_DineInMainFlow"
+                  targetNamespace="http://restaurant.example.com/bpmn">
+  <bpmn:process id="DineInMainFlow" name="Dine-In Main Flow" isExecutable="false">
+    <bpmn:startEvent id="StartEvent_CustomerArrives" name="Customer arrives">
+      <bpmn:outgoing>Flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="Task_AssignTable" name="Assign table">
+      <bpmn:incoming>Flow_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_LoadMenu" name="Load stock-aware menu">
+      <bpmn:incoming>Flow_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_3</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_CreateOrder" name="Create dine-in order">
+      <bpmn:incoming>Flow_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_4</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_CreateKitchenTicket" name="Create kitchen ticket">
+      <bpmn:incoming>Flow_4</bpmn:incoming>
+      <bpmn:outgoing>Flow_5</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_ReserveIngredients" name="Reserve ingredients">
+      <bpmn:incoming>Flow_5</bpmn:incoming>
+      <bpmn:outgoing>Flow_6</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="Gateway_StockAvailable" name="Stock available?">
+      <bpmn:incoming>Flow_6</bpmn:incoming>
+      <bpmn:incoming>Flow_8</bpmn:incoming>
+      <bpmn:outgoing>Flow_7</bpmn:outgoing>
+      <bpmn:outgoing>Flow_9</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="Task_ReviseOrder" name="Notify waiter and revise order">
+      <bpmn:incoming>Flow_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_8</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_PrepareFood" name="Prepare food">
+      <bpmn:incoming>Flow_9</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_ServeFood" name="Serve food">
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+      <bpmn:outgoing>Flow_11</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_FinalizeBill" name="Finalize bill">
+      <bpmn:incoming>Flow_11</bpmn:incoming>
+      <bpmn:outgoing>Flow_12</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_ProcessPayment" name="Process payment">
+      <bpmn:incoming>Flow_12</bpmn:incoming>
+      <bpmn:incoming>Flow_14</bpmn:incoming>
+      <bpmn:outgoing>Flow_13</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="Gateway_PaymentSuccess" name="Payment successful?">
+      <bpmn:incoming>Flow_13</bpmn:incoming>
+      <bpmn:outgoing>Flow_14</bpmn:outgoing>
+      <bpmn:outgoing>Flow_15</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="Task_CollectReview" name="Collect review">
+      <bpmn:incoming>Flow_15</bpmn:incoming>
+      <bpmn:outgoing>Flow_16</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_CleanResetTable" name="Clean and reset table">
+      <bpmn:incoming>Flow_16</bpmn:incoming>
+      <bpmn:outgoing>Flow_17</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="EndEvent_ServiceComplete" name="Service complete">
+      <bpmn:incoming>Flow_17</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_CustomerArrives" targetRef="Task_AssignTable"/>
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_AssignTable" targetRef="Task_LoadMenu"/>
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Task_LoadMenu" targetRef="Task_CreateOrder"/>
+    <bpmn:sequenceFlow id="Flow_4" sourceRef="Task_CreateOrder" targetRef="Task_CreateKitchenTicket"/>
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_CreateKitchenTicket" targetRef="Task_ReserveIngredients"/>
+    <bpmn:sequenceFlow id="Flow_6" sourceRef="Task_ReserveIngredients" targetRef="Gateway_StockAvailable"/>
+    <bpmn:sequenceFlow id="Flow_7" name="No" sourceRef="Gateway_StockAvailable" targetRef="Task_ReviseOrder"/>
+    <bpmn:sequenceFlow id="Flow_8" sourceRef="Task_ReviseOrder" targetRef="Gateway_StockAvailable"/>
+    <bpmn:sequenceFlow id="Flow_9" name="Yes" sourceRef="Gateway_StockAvailable" targetRef="Task_PrepareFood"/>
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_PrepareFood" targetRef="Task_ServeFood"/>
+    <bpmn:sequenceFlow id="Flow_11" sourceRef="Task_ServeFood" targetRef="Task_FinalizeBill"/>
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="Task_FinalizeBill" targetRef="Task_ProcessPayment"/>
+    <bpmn:sequenceFlow id="Flow_13" sourceRef="Task_ProcessPayment" targetRef="Gateway_PaymentSuccess"/>
+    <bpmn:sequenceFlow id="Flow_14" name="No" sourceRef="Gateway_PaymentSuccess" targetRef="Task_ProcessPayment"/>
+    <bpmn:sequenceFlow id="Flow_15" name="Yes" sourceRef="Gateway_PaymentSuccess" targetRef="Task_CollectReview"/>
+    <bpmn:sequenceFlow id="Flow_16" sourceRef="Task_CollectReview" targetRef="Task_CleanResetTable"/>
+    <bpmn:sequenceFlow id="Flow_17" sourceRef="Task_CleanResetTable" targetRef="EndEvent_ServiceComplete"/>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_DineInMainFlow">
+    <bpmndi:BPMNPlane id="BPMNPlane_DineInMainFlow" bpmnElement="DineInMainFlow">
+      <bpmndi:BPMNShape id="Shape_StartEvent_CustomerArrives" bpmnElement="StartEvent_CustomerArrives">
+        <dc:Bounds x="100" y="160" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_AssignTable" bpmnElement="Task_AssignTable">
+        <dc:Bounds x="180" y="138" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_LoadMenu" bpmnElement="Task_LoadMenu">
+        <dc:Bounds x="340" y="138" width="140" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_CreateOrder" bpmnElement="Task_CreateOrder">
+        <dc:Bounds x="520" y="138" width="140" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_CreateKitchenTicket" bpmnElement="Task_CreateKitchenTicket">
+        <dc:Bounds x="700" y="138" width="150" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ReserveIngredients" bpmnElement="Task_ReserveIngredients">
+        <dc:Bounds x="890" y="138" width="140" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_StockAvailable" bpmnElement="Gateway_StockAvailable" isMarkerVisible="true">
+        <dc:Bounds x="1080" y="153" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ReviseOrder" bpmnElement="Task_ReviseOrder">
+        <dc:Bounds x="1070" y="290" width="160" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_PrepareFood" bpmnElement="Task_PrepareFood">
+        <dc:Bounds x="1180" y="138" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ServeFood" bpmnElement="Task_ServeFood">
+        <dc:Bounds x="1340" y="138" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_FinalizeBill" bpmnElement="Task_FinalizeBill">
+        <dc:Bounds x="1500" y="138" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ProcessPayment" bpmnElement="Task_ProcessPayment">
+        <dc:Bounds x="1660" y="138" width="130" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_PaymentSuccess" bpmnElement="Gateway_PaymentSuccess" isMarkerVisible="true">
+        <dc:Bounds x="1830" y="153" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_CollectReview" bpmnElement="Task_CollectReview">
+        <dc:Bounds x="1930" y="138" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_CleanResetTable" bpmnElement="Task_CleanResetTable">
+        <dc:Bounds x="2090" y="138" width="150" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EndEvent_ServiceComplete" bpmnElement="EndEvent_ServiceComplete">
+        <dc:Bounds x="2280" y="160" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="Edge_Flow_1" bpmnElement="Flow_1"><di:waypoint x="136" y="178"/><di:waypoint x="180" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_2" bpmnElement="Flow_2"><di:waypoint x="300" y="178"/><di:waypoint x="340" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_3" bpmnElement="Flow_3"><di:waypoint x="480" y="178"/><di:waypoint x="520" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_4" bpmnElement="Flow_4"><di:waypoint x="660" y="178"/><di:waypoint x="700" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_5" bpmnElement="Flow_5"><di:waypoint x="850" y="178"/><di:waypoint x="890" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_6" bpmnElement="Flow_6"><di:waypoint x="1030" y="178"/><di:waypoint x="1080" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_7" bpmnElement="Flow_7"><di:waypoint x="1105" y="203"/><di:waypoint x="1105" y="330"/><di:waypoint x="1070" y="330"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_8" bpmnElement="Flow_8"><di:waypoint x="1230" y="330"/><di:waypoint x="1255" y="330"/><di:waypoint x="1255" y="203"/><di:waypoint x="1105" y="203"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_9" bpmnElement="Flow_9"><di:waypoint x="1130" y="178"/><di:waypoint x="1180" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_10" bpmnElement="Flow_10"><di:waypoint x="1300" y="178"/><di:waypoint x="1340" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_11" bpmnElement="Flow_11"><di:waypoint x="1460" y="178"/><di:waypoint x="1500" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_12" bpmnElement="Flow_12"><di:waypoint x="1620" y="178"/><di:waypoint x="1660" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_13" bpmnElement="Flow_13"><di:waypoint x="1790" y="178"/><di:waypoint x="1830" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_14" bpmnElement="Flow_14"><di:waypoint x="1855" y="203"/><di:waypoint x="1855" y="280"/><di:waypoint x="1725" y="280"/><di:waypoint x="1725" y="218"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_15" bpmnElement="Flow_15"><di:waypoint x="1880" y="178"/><di:waypoint x="1930" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_16" bpmnElement="Flow_16"><di:waypoint x="2050" y="178"/><di:waypoint x="2090" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_17" bpmnElement="Flow_17"><di:waypoint x="2240" y="178"/><di:waypoint x="2280" y="178"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

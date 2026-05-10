@@ -1,0 +1,14 @@
+com/restaurant/table/config/EventingConfiguration.class
+com/restaurant/table/TableServiceApplication.class
+com/restaurant/table/TableSettingsSummaryResponse.class
+com/restaurant/table/TableService$1.class
+com/restaurant/table/AssignTableRequest.class
+com/restaurant/table/TableStatus.class
+com/restaurant/table/TableController.class
+com/restaurant/table/TableService$TableConfiguration.class
+com/restaurant/table/persistence/repository/RestaurantTableRepository.class
+com/restaurant/table/persistence/entity/RestaurantTableEntity.class
+com/restaurant/table/TableResponse.class
+com/restaurant/table/UpsertTableSettingRequest.class
+com/restaurant/table/TableSettingRecordResponse.class
+com/restaurant/table/TableService.class

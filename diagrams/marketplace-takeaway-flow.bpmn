@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_MarketplaceTakeawayFlow"
+                  targetNamespace="http://restaurant.example.com/bpmn">
+  <bpmn:process id="MarketplaceTakeawayFlow" name="Marketplace Takeaway Flow" isExecutable="false">
+    <bpmn:startEvent id="StartEvent_MarketplaceOrder" name="Marketplace order received">
+      <bpmn:outgoing>MF_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="Task_ValidatePayload" name="Validate payload">
+      <bpmn:incoming>MF_1</bpmn:incoming>
+      <bpmn:outgoing>MF_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_MapOrder" name="Map to internal takeaway order">
+      <bpmn:incoming>MF_2</bpmn:incoming>
+      <bpmn:outgoing>MF_3</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_ReserveStock" name="Reserve stock">
+      <bpmn:incoming>MF_3</bpmn:incoming>
+      <bpmn:outgoing>MF_4</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="Gateway_MarketplaceStock" name="Stock available?">
+      <bpmn:incoming>MF_4</bpmn:incoming>
+      <bpmn:outgoing>MF_5</bpmn:outgoing>
+      <bpmn:outgoing>MF_6</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="Task_RejectOrder" name="Reject or substitute order">
+      <bpmn:incoming>MF_5</bpmn:incoming>
+      <bpmn:outgoing>MF_7</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_PushFailure" name="Push failure status">
+      <bpmn:incoming>MF_7</bpmn:incoming>
+      <bpmn:outgoing>MF_8</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="EndEvent_MarketplaceRejected" name="Order rejected">
+      <bpmn:incoming>MF_8</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="Task_CreateTakeaway" name="Create takeaway and kitchen ticket">
+      <bpmn:incoming>MF_6</bpmn:incoming>
+      <bpmn:outgoing>MF_9</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_PrepareTakeaway" name="Prepare takeaway order">
+      <bpmn:incoming>MF_9</bpmn:incoming>
+      <bpmn:outgoing>MF_10</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_PushStatus" name="Push preparation status">
+      <bpmn:incoming>MF_10</bpmn:incoming>
+      <bpmn:outgoing>MF_11</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_ReconcilePayment" name="Reconcile payment">
+      <bpmn:incoming>MF_11</bpmn:incoming>
+      <bpmn:outgoing>MF_12</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_CloseOrder" name="Close takeaway order">
+      <bpmn:incoming>MF_12</bpmn:incoming>
+      <bpmn:outgoing>MF_13</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="EndEvent_MarketplaceCompleted" name="Order completed">
+      <bpmn:incoming>MF_13</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="MF_1" sourceRef="StartEvent_MarketplaceOrder" targetRef="Task_ValidatePayload"/>
+    <bpmn:sequenceFlow id="MF_2" sourceRef="Task_ValidatePayload" targetRef="Task_MapOrder"/>
+    <bpmn:sequenceFlow id="MF_3" sourceRef="Task_MapOrder" targetRef="Task_ReserveStock"/>
+    <bpmn:sequenceFlow id="MF_4" sourceRef="Task_ReserveStock" targetRef="Gateway_MarketplaceStock"/>
+    <bpmn:sequenceFlow id="MF_5" name="No" sourceRef="Gateway_MarketplaceStock" targetRef="Task_RejectOrder"/>
+    <bpmn:sequenceFlow id="MF_6" name="Yes" sourceRef="Gateway_MarketplaceStock" targetRef="Task_CreateTakeaway"/>
+    <bpmn:sequenceFlow id="MF_7" sourceRef="Task_RejectOrder" targetRef="Task_PushFailure"/>
+    <bpmn:sequenceFlow id="MF_8" sourceRef="Task_PushFailure" targetRef="EndEvent_MarketplaceRejected"/>
+    <bpmn:sequenceFlow id="MF_9" sourceRef="Task_CreateTakeaway" targetRef="Task_PrepareTakeaway"/>
+    <bpmn:sequenceFlow id="MF_10" sourceRef="Task_PrepareTakeaway" targetRef="Task_PushStatus"/>
+    <bpmn:sequenceFlow id="MF_11" sourceRef="Task_PushStatus" targetRef="Task_ReconcilePayment"/>
+    <bpmn:sequenceFlow id="MF_12" sourceRef="Task_ReconcilePayment" targetRef="Task_CloseOrder"/>
+    <bpmn:sequenceFlow id="MF_13" sourceRef="Task_CloseOrder" targetRef="EndEvent_MarketplaceCompleted"/>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_MarketplaceTakeawayFlow">
+    <bpmndi:BPMNPlane id="BPMNPlane_MarketplaceTakeawayFlow" bpmnElement="MarketplaceTakeawayFlow">
+      <bpmndi:BPMNShape id="Shape_StartEvent_MarketplaceOrder" bpmnElement="StartEvent_MarketplaceOrder">
+        <dc:Bounds x="80" y="160" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ValidatePayload" bpmnElement="Task_ValidatePayload">
+        <dc:Bounds x="150" y="138" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_MapOrder" bpmnElement="Task_MapOrder">
+        <dc:Bounds x="310" y="138" width="170" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ReserveStock" bpmnElement="Task_ReserveStock">
+        <dc:Bounds x="520" y="138" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_MarketplaceStock" bpmnElement="Gateway_MarketplaceStock" isMarkerVisible="true">
+        <dc:Bounds x="690" y="153" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_RejectOrder" bpmnElement="Task_RejectOrder">
+        <dc:Bounds x="660" y="300" width="150" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_PushFailure" bpmnElement="Task_PushFailure">
+        <dc:Bounds x="850" y="300" width="130" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EndEvent_MarketplaceRejected" bpmnElement="EndEvent_MarketplaceRejected">
+        <dc:Bounds x="1020" y="322" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_CreateTakeaway" bpmnElement="Task_CreateTakeaway">
+        <dc:Bounds x="790" y="138" width="180" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_PrepareTakeaway" bpmnElement="Task_PrepareTakeaway">
+        <dc:Bounds x="1010" y="138" width="160" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_PushStatus" bpmnElement="Task_PushStatus">
+        <dc:Bounds x="1210" y="138" width="130" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ReconcilePayment" bpmnElement="Task_ReconcilePayment">
+        <dc:Bounds x="1380" y="138" width="140" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_CloseOrder" bpmnElement="Task_CloseOrder">
+        <dc:Bounds x="1560" y="138" width="130" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EndEvent_MarketplaceCompleted" bpmnElement="EndEvent_MarketplaceCompleted">
+        <dc:Bounds x="1730" y="160" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="Edge_MF_1" bpmnElement="MF_1"><di:waypoint x="116" y="178"/><di:waypoint x="150" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_MF_2" bpmnElement="MF_2"><di:waypoint x="270" y="178"/><di:waypoint x="310" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_MF_3" bpmnElement="MF_3"><di:waypoint x="480" y="178"/><di:waypoint x="520" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_MF_4" bpmnElement="MF_4"><di:waypoint x="640" y="178"/><di:waypoint x="690" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_MF_5" bpmnElement="MF_5"><di:waypoint x="715" y="203"/><di:waypoint x="715" y="340"/><di:waypoint x="660" y="340"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_MF_6" bpmnElement="MF_6"><di:waypoint x="740" y="178"/><di:waypoint x="790" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_MF_7" bpmnElement="MF_7"><di:waypoint x="810" y="340"/><di:waypoint x="850" y="340"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_MF_8" bpmnElement="MF_8"><di:waypoint x="980" y="340"/><di:waypoint x="1020" y="340"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_MF_9" bpmnElement="MF_9"><di:waypoint x="970" y="178"/><di:waypoint x="1010" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_MF_10" bpmnElement="MF_10"><di:waypoint x="1170" y="178"/><di:waypoint x="1210" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_MF_11" bpmnElement="MF_11"><di:waypoint x="1340" y="178"/><di:waypoint x="1380" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_MF_12" bpmnElement="MF_12"><di:waypoint x="1520" y="178"/><di:waypoint x="1560" y="178"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_MF_13" bpmnElement="MF_13"><di:waypoint x="1690" y="178"/><di:waypoint x="1730" y="178"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

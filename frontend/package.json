@@ -1,0 +1,27 @@
+{
+  "name": "restaurant-frontend",
+  "private": true,
+  "version": "0.0.1",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:admin": "npm run dev --workspace @restaurant/admin-ui",
+    "dev:restaurant": "npm run dev --workspace @restaurant/restaurant-ui",
+    "dev:pos": "npm run dev --workspace @restaurant/pos-ui",
+    "dev:kitchen": "npm run dev --workspace @restaurant/kitchen-ui",
+    "dev:inventory": "npm run dev --workspace @restaurant/inventory-ui",
+    "dev:employees": "npm run dev --workspace @restaurant/employees-ui",
+    "dev:property-settings": "npm run dev --workspace @restaurant/property-settings-ui",
+    "dev:reports": "npm run dev --workspace @restaurant/reports-ui",
+    "build": "npm run build --workspace @restaurant/admin-ui && npm run build --workspace @restaurant/restaurant-ui && npm run build --workspace @restaurant/pos-ui && npm run build --workspace @restaurant/kitchen-ui && npm run build --workspace @restaurant/inventory-ui && npm run build --workspace @restaurant/employees-ui && npm run build --workspace @restaurant/property-settings-ui && npm run build --workspace @restaurant/reports-ui"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

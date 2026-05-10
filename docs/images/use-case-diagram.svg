@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="1100" viewBox="0 0 1700 1100" role="img" aria-labelledby="title desc">
+  <title id="title">Restaurant Management Use Case Diagram</title>
+  <desc id="desc">Use case diagram showing actors and capabilities across dine-in, administration, delivery, and analytics workflows.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .frame { fill: #ffffff; stroke: #1e293b; stroke-width: 3; rx: 24; ry: 24; }
+      .actor { fill: #ecfeff; stroke: #0f766e; stroke-width: 2.5; rx: 18; ry: 18; }
+      .actor-alt { fill: #eff6ff; stroke: #2563eb; stroke-width: 2.5; rx: 18; ry: 18; }
+      .usecase { fill: #fff7ed; stroke: #c2410c; stroke-width: 2.2; }
+      .title { font: 700 30px Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 400 15px Arial, sans-serif; fill: #475569; }
+      .actor-label { font: 700 16px Arial, sans-serif; fill: #0f172a; text-anchor: middle; }
+      .use-label { font: 700 14px Arial, sans-serif; fill: #111827; text-anchor: middle; }
+      .use-sub { font: 400 12px Arial, sans-serif; fill: #334155; text-anchor: middle; }
+      .section { font: 700 18px Arial, sans-serif; fill: #0f172a; }
+      .link { stroke: #64748b; stroke-width: 2.2; fill: none; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1700" height="1100"/>
+  <text class="title" x="850" y="56" text-anchor="middle">Restaurant Management System Use Case Diagram</text>
+  <text class="subtitle" x="850" y="84" text-anchor="middle">Actors and system capabilities across dine-in, kitchen, operations, delivery, and reporting</text>
+
+  <rect class="actor" x="60" y="170" width="220" height="90"/>
+  <text class="actor-label" x="170" y="210">Customer</text>
+  <text class="actor-label" x="170" y="232">Dine-in / QR / Review</text>
+
+  <rect class="actor" x="60" y="320" width="220" height="90"/>
+  <text class="actor-label" x="170" y="360">Waiter / Host</text>
+  <text class="actor-label" x="170" y="382">Front-of-house staff</text>
+
+  <rect class="actor" x="60" y="470" width="220" height="90"/>
+  <text class="actor-label" x="170" y="510">Cook</text>
+  <text class="actor-label" x="170" y="532">Kitchen employee</text>
+
+  <rect class="actor" x="60" y="620" width="220" height="90"/>
+  <text class="actor-label" x="170" y="660">Cashier</text>
+  <text class="actor-label" x="170" y="682">Billing and payment</text>
+
+  <rect class="actor" x="60" y="770" width="220" height="90"/>
+  <text class="actor-label" x="170" y="810">Cleaner / Busser</text>
+  <text class="actor-label" x="170" y="832">Reset table</text>
+
+  <rect class="actor-alt" x="1420" y="250" width="220" height="90"/>
+  <text class="actor-label" x="1530" y="290">Manager / Admin</text>
+  <text class="actor-label" x="1530" y="312">Controls and analytics</text>
+
+  <rect class="actor-alt" x="1420" y="430" width="220" height="90"/>
+  <text class="actor-label" x="1530" y="470">Marketplace App</text>
+  <text class="actor-label" x="1530" y="492">Swiggy / Zomato / etc.</text>
+
+  <rect class="frame" x="350" y="140" width="1000" height="820"/>
+  <text class="section" x="390" y="182">Restaurant Management System</text>
+
+  <text class="section" x="420" y="230">Dine-In And Service</text>
+  <ellipse class="usecase" cx="520" cy="300" rx="120" ry="44"/>
+  <text class="use-label" x="520" y="296">Assign Table</text>
+  <text class="use-sub" x="520" y="316">Table Service</text>
+
+  <ellipse class="usecase" cx="800" cy="300" rx="150" ry="44"/>
+  <text class="use-label" x="800" y="296">View Stock-Aware Menu</text>
+  <text class="use-sub" x="800" y="316">Catalog + Inventory</text>
+
+  <ellipse class="usecase" cx="1090" cy="300" rx="140" ry="44"/>
+  <text class="use-label" x="1090" y="296">Create Dine-In Order</text>
+  <text class="use-sub" x="1090" y="316">Order Service</text>
+
+  <ellipse class="usecase" cx="520" cy="430" rx="130" ry="44"/>
+  <text class="use-label" x="520" y="426">Track Kitchen Status</text>
+  <text class="use-sub" x="520" y="446">Kitchen Service</text>
+
+  <ellipse class="usecase" cx="800" cy="430" rx="120" ry="44"/>
+  <text class="use-label" x="800" y="426">Prepare Food</text>
+  <text class="use-sub" x="800" y="446">Kitchen + Inventory</text>
+
+  <ellipse class="usecase" cx="1090" cy="430" rx="110" ry="44"/>
+  <text class="use-label" x="1090" y="426">Generate Bill</text>
+  <text class="use-sub" x="1090" y="446">Billing Service</text>
+
+  <ellipse class="usecase" cx="520" cy="560" rx="110" ry="44"/>
+  <text class="use-label" x="520" y="556">Process Payment</text>
+  <text class="use-sub" x="520" y="576">Payment Service</text>
+
+  <ellipse class="usecase" cx="800" cy="560" rx="110" ry="44"/>
+  <text class="use-label" x="800" y="556">Submit Review</text>
+  <text class="use-sub" x="800" y="576">Review Service</text>
+
+  <ellipse class="usecase" cx="1090" cy="560" rx="135" ry="44"/>
+  <text class="use-label" x="1090" y="556">Clean And Reset Table</text>
+  <text class="use-sub" x="1090" y="576">Table Service</text>
+
+  <text class="section" x="420" y="670">Administration And Analytics</text>
+  <ellipse class="usecase" cx="520" cy="740" rx="120" ry="44"/>
+  <text class="use-label" x="520" y="736">Manage Inventory</text>
+  <text class="use-sub" x="520" y="756">Inventory Service</text>
+
+  <ellipse class="usecase" cx="800" cy="740" rx="145" ry="44"/>
+  <text class="use-label" x="800" y="736">Manage Menu And Recipes</text>
+  <text class="use-sub" x="800" y="756">Catalog Service</text>
+
+  <ellipse class="usecase" cx="1090" cy="740" rx="125" ry="44"/>
+  <text class="use-label" x="1090" y="736">Manage Employees</text>
+  <text class="use-sub" x="1090" y="756">Employee Service</text>
+
+  <ellipse class="usecase" cx="520" cy="860" rx="150" ry="44"/>
+  <text class="use-label" x="520" y="856">Manage Properties And Tables</text>
+  <text class="use-sub" x="520" y="876">Property + Table Services</text>
+
+  <ellipse class="usecase" cx="800" cy="860" rx="135" ry="44"/>
+  <text class="use-label" x="800" y="856">View Reports And Insights</text>
+  <text class="use-sub" x="800" y="876">Reporting + Insights</text>
+
+  <ellipse class="usecase" cx="1090" cy="860" rx="145" ry="44"/>
+  <text class="use-label" x="1090" y="856">Audit Timeline And History</text>
+  <text class="use-sub" x="1090" y="876">Audit Timeline Service</text>
+
+  <ellipse class="usecase" cx="1210" cy="300" rx="100" ry="44"/>
+  <text class="use-label" x="1210" y="296">Takeaway Order</text>
+  <text class="use-sub" x="1210" y="316">Takeaway Service</text>
+
+  <ellipse class="usecase" cx="1210" cy="430" rx="125" ry="44"/>
+  <text class="use-label" x="1210" y="426">Import Marketplace Order</text>
+  <text class="use-sub" x="1210" y="446">Integration Service</text>
+
+  <path class="link" d="M 280 215 L 650 290"/>
+  <path class="link" d="M 280 215 L 740 540"/>
+  <path class="link" d="M 280 365 L 400 300"/>
+  <path class="link" d="M 280 365 L 950 300"/>
+  <path class="link" d="M 280 365 L 400 430"/>
+  <path class="link" d="M 280 515 L 680 430"/>
+  <path class="link" d="M 280 515 L 400 430"/>
+  <path class="link" d="M 280 665 L 980 430"/>
+  <path class="link" d="M 280 665 L 410 560"/>
+  <path class="link" d="M 280 815 L 960 560"/>
+
+  <path class="link" d="M 1420 295 L 1210 740"/>
+  <path class="link" d="M 1420 295 L 930 740"/>
+  <path class="link" d="M 1420 295 L 650 860"/>
+  <path class="link" d="M 1420 295 L 930 860"/>
+  <path class="link" d="M 1420 295 L 1220 860"/>
+  <path class="link" d="M 1420 475 L 1310 430"/>
+  <path class="link" d="M 1420 475 L 1310 300"/>
+</svg>

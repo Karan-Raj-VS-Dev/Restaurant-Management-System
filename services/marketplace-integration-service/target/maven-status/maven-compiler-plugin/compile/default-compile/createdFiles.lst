@@ -1,0 +1,8 @@
+com/restaurant/integration/persistence/entity/MarketplaceConnectorEntity.class
+com/restaurant/integration/config/EventingConfiguration.class
+com/restaurant/integration/MarketplaceOrderResponse.class
+com/restaurant/integration/persistence/repository/MarketplaceConnectorRepository.class
+com/restaurant/integration/MarketplaceIntegrationController.class
+com/restaurant/integration/MarketplaceIntegrationServiceApplication.class
+com/restaurant/integration/MarketplaceIntegrationService.class
+com/restaurant/integration/MarketplaceOrderRequest.class

@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="1080" viewBox="0 0 1700 1080" role="img" aria-labelledby="title desc">
+  <title id="title">UI And Service Base Map</title>
+  <desc id="desc">Base UI architecture showing React applications, backend microservices, event gateway, and the unified PostgreSQL database with schemas.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .title { font: 700 30px Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 400 15px Arial, sans-serif; fill: #475569; }
+      .group { fill: #ffffff; stroke: #1f2937; stroke-width: 2.5; rx: 24; ry: 24; }
+      .ui { fill: #ecfeff; stroke: #0f766e; stroke-width: 2; rx: 16; ry: 16; }
+      .svc { fill: #fff7ed; stroke: #c2410c; stroke-width: 2; rx: 14; ry: 14; }
+      .infra { fill: #eff6ff; stroke: #2563eb; stroke-width: 2; rx: 16; ry: 16; }
+      .db { fill: #f5f3ff; stroke: #7c3aed; stroke-width: 2; rx: 18; ry: 18; }
+      .gtitle { font: 700 19px Arial, sans-serif; fill: #0f172a; }
+      .card { font: 700 15px Arial, sans-serif; fill: #111827; text-anchor: middle; }
+      .sub { font: 400 12px Arial, sans-serif; fill: #334155; text-anchor: middle; }
+      .line { stroke: #475569; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .dashed { stroke: #2563eb; stroke-width: 2.5; fill: none; stroke-dasharray: 8 8; marker-end: url(#blueArrow); }
+      .dbtext { font: 700 14px Arial, sans-serif; fill: #312e81; }
+      .dbsub { font: 400 12px Arial, sans-serif; fill: #4338ca; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+    <marker id="blueArrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1700" height="1080"/>
+  <text class="title" x="850" y="56" text-anchor="middle">UI Base And Service Architecture</text>
+  <text class="subtitle" x="850" y="84" text-anchor="middle">React frontends, event-driven Spring Boot services, and the unified restaurantManagementSystem PostgreSQL database</text>
+
+  <rect class="group" x="50" y="140" width="280" height="780"/>
+  <text class="gtitle" x="90" y="180">React UI Applications</text>
+
+  <rect class="ui" x="80" y="220" width="220" height="88"/>
+  <text class="card" x="190" y="256">pos-ui</text>
+  <text class="sub" x="190" y="278">waiter, host, cashier</text>
+
+  <rect class="ui" x="80" y="350" width="220" height="88"/>
+  <text class="card" x="190" y="386">kitchen-ui</text>
+  <text class="sub" x="190" y="408">ticket board and prep status</text>
+
+  <rect class="ui" x="80" y="480" width="220" height="88"/>
+  <text class="card" x="190" y="516">admin-ui</text>
+  <text class="sub" x="190" y="538">menu, stock, staff, property</text>
+
+  <rect class="ui" x="80" y="610" width="220" height="88"/>
+  <text class="card" x="190" y="646">customer-ui</text>
+  <text class="sub" x="190" y="668">QR menu, takeaway, reviews</text>
+
+  <rect class="ui" x="80" y="740" width="220" height="88"/>
+  <text class="card" x="190" y="776">analytics-ui</text>
+  <text class="sub" x="190" y="798">reports and insights dashboards</text>
+
+  <rect class="group" x="390" y="140" width="290" height="780"/>
+  <text class="gtitle" x="430" y="180">API And Event Layer</text>
+
+  <rect class="infra" x="430" y="250" width="210" height="92"/>
+  <text class="card" x="535" y="286">REST APIs</text>
+  <text class="sub" x="535" y="308">direct commands and reads</text>
+
+  <rect class="infra" x="430" y="410" width="210" height="92"/>
+  <text class="card" x="535" y="446">event-gateway-service</text>
+  <text class="sub" x="535" y="468">local async fan-out</text>
+
+  <rect class="infra" x="430" y="570" width="210" height="92"/>
+  <text class="card" x="535" y="606">Shared Event Envelope</text>
+  <text class="sub" x="535" y="628">event keys and contracts</text>
+
+  <rect class="infra" x="430" y="730" width="210" height="92"/>
+  <text class="card" x="535" y="766">Planned Kafka Upgrade</text>
+  <text class="sub" x="535" y="788">production event backbone</text>
+
+  <rect class="group" x="740" y="140" width="540" height="780"/>
+  <text class="gtitle" x="780" y="180">Backend Services</text>
+
+  <rect class="svc" x="780" y="220" width="460" height="170"/>
+  <text class="gtitle" x="810" y="250">Dining And Kitchen</text>
+  <text class="sub" x="1010" y="286">table-service | catalog-service | inventory-service | order-service</text>
+  <text class="sub" x="1010" y="308">kitchen-service | billing-service | payment-service</text>
+  <text class="sub" x="1010" y="338">Primary dine-in flow, stock-aware menu, kitchen preparation, bill, and payment</text>
+
+  <rect class="svc" x="780" y="430" width="460" height="170"/>
+  <text class="gtitle" x="810" y="460">People, Property, And Support</text>
+  <text class="sub" x="1010" y="496">auth-service | customer-service | employee-service | property-service</text>
+  <text class="sub" x="1010" y="518">review-feedback-service | audit-timeline-service</text>
+  <text class="sub" x="1010" y="548">Access control, customer records, staff assignment, reviews, and audit history</text>
+
+  <rect class="svc" x="780" y="640" width="460" height="220"/>
+  <text class="gtitle" x="810" y="670">Delivery And Analytics</text>
+  <text class="sub" x="1010" y="706">takeaway-service | marketplace-integration-service</text>
+  <text class="sub" x="1010" y="728">reporting-service | operations-insights-service</text>
+  <text class="sub" x="1010" y="758">External order integration, daily reporting, busiest table, top server,</text>
+  <text class="sub" x="1010" y="780">stock insights, menu impact, and operational dashboards</text>
+
+  <rect class="group" x="1330" y="140" width="320" height="780"/>
+  <text class="gtitle" x="1370" y="180">Unified PostgreSQL</text>
+
+  <rect class="db" x="1365" y="230" width="250" height="620"/>
+  <text class="card" x="1490" y="270">restaurantManagementSystem</text>
+  <text class="dbtext" x="1395" y="320">Schemas</text>
+  <text class="dbsub" x="1395" y="350">auth, customer, employee, property</text>
+  <text class="dbsub" x="1395" y="378">event_gateway, table_mgmt, catalog</text>
+  <text class="dbsub" x="1395" y="406">inventory, ordering, kitchen, billing</text>
+  <text class="dbsub" x="1395" y="434">payment, takeaway, marketplace_integration</text>
+  <text class="dbsub" x="1395" y="462">audit, review, reporting, operations_insights</text>
+  <text class="dbtext" x="1395" y="520">Why one DB?</text>
+  <text class="dbsub" x="1395" y="550">Local development simplicity</text>
+  <text class="dbsub" x="1395" y="578">Schema-per-service isolation</text>
+  <text class="dbsub" x="1395" y="606">Keeps duplicate table names separated</text>
+  <text class="dbsub" x="1395" y="634">Works with current Spring datasource setup</text>
+
+  <path class="line" d="M 300 264 L 430 296"/>
+  <path class="line" d="M 300 394 L 430 296"/>
+  <path class="line" d="M 300 524 L 430 296"/>
+  <path class="line" d="M 300 654 L 430 296"/>
+  <path class="line" d="M 300 784 L 430 296"/>
+
+  <path class="line" d="M 640 296 L 780 296"/>
+  <path class="dashed" d="M 640 456 L 780 456"/>
+  <path class="dashed" d="M 640 616 L 780 750"/>
+
+  <path class="line" d="M 1240 305 L 1365 305"/>
+  <path class="line" d="M 1240 515 L 1365 515"/>
+  <path class="line" d="M 1240 750 L 1365 750"/>
+</svg>

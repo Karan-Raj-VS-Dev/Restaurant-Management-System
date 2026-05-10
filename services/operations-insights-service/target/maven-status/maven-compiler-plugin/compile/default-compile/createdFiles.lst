@@ -1,0 +1,15 @@
+com/restaurant/insights/DailySnapshot.class
+com/restaurant/insights/StockInsight.class
+com/restaurant/insights/persistence/repository/StockInsightRepository.class
+com/restaurant/insights/OperationsInsightsServiceApplication.class
+com/restaurant/insights/config/EventingConfiguration.class
+com/restaurant/insights/DailyOperationsInsight.class
+com/restaurant/insights/OperationsInsightsProjection.class
+com/restaurant/insights/event/OperationsInsightsEventListener.class
+com/restaurant/insights/persistence/entity/StockInsightEntity.class
+com/restaurant/insights/persistence/entity/DailyOperationsInsightEntity.class
+com/restaurant/insights/StockHealthView.class
+com/restaurant/insights/OperationsInsightsController.class
+com/restaurant/insights/persistence/repository/DailyOperationsInsightRepository.class
+com/restaurant/insights/InternalEventController.class
+com/restaurant/insights/OperationsInsightsService.class
