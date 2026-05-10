@@ -1,8 +1,0 @@
-/Users/vkaran/Documents/New project/restaurant-management-system/services/marketplace-integration-service/src/main/java/com/restaurant/integration/MarketplaceIntegrationController.java
-/Users/vkaran/Documents/New project/restaurant-management-system/services/marketplace-integration-service/src/main/java/com/restaurant/integration/MarketplaceIntegrationService.java
-/Users/vkaran/Documents/New project/restaurant-management-system/services/marketplace-integration-service/src/main/java/com/restaurant/integration/MarketplaceIntegrationServiceApplication.java
-/Users/vkaran/Documents/New project/restaurant-management-system/services/marketplace-integration-service/src/main/java/com/restaurant/integration/MarketplaceOrderRequest.java
-/Users/vkaran/Documents/New project/restaurant-management-system/services/marketplace-integration-service/src/main/java/com/restaurant/integration/MarketplaceOrderResponse.java
-/Users/vkaran/Documents/New project/restaurant-management-system/services/marketplace-integration-service/src/main/java/com/restaurant/integration/config/EventingConfiguration.java
-/Users/vkaran/Documents/New project/restaurant-management-system/services/marketplace-integration-service/src/main/java/com/restaurant/integration/persistence/entity/MarketplaceConnectorEntity.java
-/Users/vkaran/Documents/New project/restaurant-management-system/services/marketplace-integration-service/src/main/java/com/restaurant/integration/persistence/repository/MarketplaceConnectorRepository.java

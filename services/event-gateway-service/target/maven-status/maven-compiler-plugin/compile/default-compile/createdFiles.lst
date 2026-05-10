@@ -1,6 +1,0 @@
-com/restaurant/eventgateway/EventDispatchResponse.class
-com/restaurant/eventgateway/persistence/repository/EventDispatchRepository.class
-com/restaurant/eventgateway/EventDispatchService.class
-com/restaurant/eventgateway/EventGatewayServiceApplication.class
-com/restaurant/eventgateway/EventGatewayController.class
-com/restaurant/eventgateway/persistence/entity/EventDispatchEntity.class

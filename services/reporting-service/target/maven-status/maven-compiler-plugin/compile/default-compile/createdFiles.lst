@@ -1,6 +1,0 @@
-com/restaurant/reporting/persistence/repository/DailyPropertySummaryRepository.class
-com/restaurant/reporting/ReportingServiceApplication.class
-com/restaurant/reporting/ReportingController.class
-com/restaurant/reporting/persistence/entity/DailyPropertySummaryEntity.class
-com/restaurant/reporting/ReportingService.class
-com/restaurant/reporting/DailySummaryResponse.class
