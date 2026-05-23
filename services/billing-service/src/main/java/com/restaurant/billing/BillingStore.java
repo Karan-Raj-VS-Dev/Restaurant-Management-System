@@ -1,30 +1,54 @@
 package com.restaurant.billing;
 
+import com.restaurant.billing.persistence.entity.BillEntity;
+import com.restaurant.billing.persistence.entity.BillItemEntity;
+import com.restaurant.billing.persistence.repository.BillItemRepository;
+import com.restaurant.billing.persistence.repository.BillRepository;
 import com.restaurant.platform.eventing.contract.OrderCreatedEvent;
 import com.restaurant.platform.eventing.contract.OrderLineItem;
-import org.springframework.stereotype.Component;
-
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Component
+@Transactional
 public class BillingStore {
 
+    private static final BigDecimal DEFAULT_TAX_RATE = BigDecimal.valueOf(0.05);
+    private static final List<String> ACTIVE_BILL_STATUSES = List.of("DRAFT", "FINALIZED");
     private static final Map<String, BigDecimal> MENU_PRICES = Map.of(
             "item-001", BigDecimal.valueOf(299),
             "item-002", BigDecimal.valueOf(249),
             "item-003", BigDecimal.valueOf(199)
     );
 
-    private final Map<String, BillRecord> bills = new ConcurrentHashMap<>();
+    private final BillRepository billRepository;
+    private final BillItemRepository billItemRepository;
+
+    public BillingStore(BillRepository billRepository, BillItemRepository billItemRepository) {
+        this.billRepository = billRepository;
+        this.billItemRepository = billItemRepository;
+    }
 
     public BillRecord createDraftFromOrder(OrderCreatedEvent event) {
         List<BillLineRecord> lines = event.items().stream()
                 .map(this::toLine)
                 .toList();
+        BillEntity existing = findActiveBillForTable(event.tenantId(), event.propertyId(), event.tableId());
+        if (existing != null) {
+            return appendOrderToBill(existing, event.orderId(), lines);
+        }
         return createDraft("bill-" + UUID.randomUUID(), event.orderId(), event.tenantId(), event.propertyId(), event.tableId(), lines);
     }
 
@@ -33,76 +57,152 @@ public class BillingStore {
     }
 
     public BillRecord finalizeBill(String tenantId, String propertyId, String billId) {
-        return bills.compute(billId, (key, existing) -> {
-            BillRecord current = existing != null
-                    ? existing
-                    : buildDraft(billId, "order-unknown", tenantId, propertyId, null, List.of(new BillLineRecord("item-001", "Margherita Pizza", 1, BigDecimal.valueOf(299))));
-            return new BillRecord(
-                    current.billId(),
-                    current.orderId(),
-                    current.tenantId(),
-                    current.propertyId(),
-                    current.tableId(),
-                    "FINALIZED",
-                    current.items(),
-                    current.subtotal(),
-                    current.tax(),
-                    current.total()
-            );
-        });
+        BillEntity entity = billRepository.findById(billId)
+                .filter(bill -> tenantId.equals(bill.getTenantId()) && propertyId.equals(bill.getPropertyId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bill was not found."));
+        entity.setBillingStatus("FINALIZED");
+        BillEntity saved = billRepository.save(entity);
+        return toRecord(saved, billItemRepository.findByBillIdOrderByBillItemIdAsc(billId));
     }
 
     public BillRecord getBill(String tenantId, String propertyId, String billId) {
-        return bills.computeIfAbsent(
-                billId,
-                ignored -> buildDraft("bill-fallback", "order-fallback", tenantId, propertyId, null, List.of(new BillLineRecord("item-001", "Margherita Pizza", 1, BigDecimal.valueOf(299))))
-        );
+        BillEntity entity = billRepository.findById(billId)
+                .filter(bill -> tenantId.equals(bill.getTenantId()) && propertyId.equals(bill.getPropertyId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bill was not found."));
+        return toRecord(entity, billItemRepository.findByBillIdOrderByBillItemIdAsc(billId));
     }
 
     public BillRecord markPaid(String billId) {
-        return bills.computeIfPresent(billId, (ignored, current) -> new BillRecord(
-                current.billId(),
-                current.orderId(),
-                current.tenantId(),
-                current.propertyId(),
-                current.tableId(),
-                "PAID",
-                current.items(),
-                current.subtotal(),
-                current.tax(),
-                current.total()
-        ));
+        BillEntity entity = billRepository.findById(billId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bill was not found."));
+        entity.setBillingStatus("PAID");
+        entity.setClosedAt(Instant.now());
+        BillEntity saved = billRepository.save(entity);
+        return toRecord(saved, billItemRepository.findByBillIdOrderByBillItemIdAsc(billId));
     }
 
     public List<BillRecord> listBills(String tenantId, String propertyId) {
-        return bills.values().stream()
-                .filter(bill -> tenantId.equals(bill.tenantId()) && propertyId.equals(bill.propertyId()))
-                .sorted((left, right) -> right.billId().compareTo(left.billId()))
+        List<BillEntity> bills = billRepository.findByTenantIdAndPropertyIdOrderByGeneratedAtDesc(tenantId, propertyId);
+        Map<String, List<BillItemEntity>> itemsByBillId = loadItemsByBillId(
+                bills.stream().map(BillEntity::getBillId).toList()
+        );
+        return bills.stream()
+                .map(bill -> toRecord(bill, itemsByBillId.getOrDefault(bill.getBillId(), List.of())))
                 .toList();
     }
 
-    private BillRecord createDraft(String billId, String orderId, String tenantId, String propertyId, String tableId, List<BillLineRecord> items) {
-        BillRecord record = buildDraft(billId, orderId, tenantId, propertyId, tableId, items);
-        bills.put(record.billId(), record);
-        return record;
+    private BillRecord createDraft(
+            String billId,
+            String orderId,
+            String tenantId,
+            String propertyId,
+            String tableId,
+            List<BillLineRecord> items
+    ) {
+        BillSnapshot snapshot = summarize(items);
+        BillEntity entity = new BillEntity();
+        entity.setBillId(billId);
+        entity.setOrderId(orderId);
+        entity.setLinkedOrderIds(orderId);
+        entity.setTenantId(tenantId);
+        entity.setPropertyId(propertyId);
+        entity.setTableId(tableId);
+        entity.setCustomerId(null);
+        entity.setBillingStatus("DRAFT");
+        entity.setSubtotalAmount(snapshot.subtotal());
+        entity.setTaxAmount(snapshot.tax());
+        entity.setServiceChargeAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+        entity.setDiscountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+        entity.setTotalAmount(snapshot.total());
+        entity.setGeneratedAt(Instant.now());
+        BillEntity saved = billRepository.save(entity);
+        replaceBillItems(saved.getBillId(), items);
+        return toRecord(saved, billItemRepository.findByBillIdOrderByBillItemIdAsc(saved.getBillId()));
     }
 
-    private BillRecord buildDraft(String billId, String orderId, String tenantId, String propertyId, String tableId, List<BillLineRecord> items) {
-        BigDecimal subtotal = items.stream()
-                .map(item -> item.unitPrice().multiply(BigDecimal.valueOf(item.quantity())))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal tax = subtotal.multiply(BigDecimal.valueOf(0.05));
-        return new BillRecord(
-                billId,
-                orderId,
+    private BillEntity findActiveBillForTable(String tenantId, String propertyId, String tableId) {
+        if (tableId == null || tableId.isBlank()) {
+            return null;
+        }
+        return billRepository.findFirstByTenantIdAndPropertyIdAndTableIdAndBillingStatusInOrderByGeneratedAtDesc(
                 tenantId,
                 propertyId,
                 tableId,
-                "DRAFT",
-                items,
-                subtotal,
-                tax,
-                subtotal.add(tax)
+                ACTIVE_BILL_STATUSES
+        ).orElse(null);
+    }
+
+    private BillRecord appendOrderToBill(BillEntity existing, String orderId, List<BillLineRecord> additionalLines) {
+        List<BillLineRecord> mergedItems = mergeLineItems(
+                billItemRepository.findByBillIdOrderByBillItemIdAsc(existing.getBillId()).stream()
+                        .map(this::toLineRecord)
+                        .toList(),
+                additionalLines
+        );
+        BillSnapshot snapshot = summarize(mergedItems);
+        List<String> orderIds = new ArrayList<>(parseOrderIds(existing.getLinkedOrderIds(), existing.getOrderId()));
+        if (!orderIds.contains(orderId)) {
+            orderIds.add(orderId);
+        }
+        existing.setOrderId(orderId);
+        existing.setLinkedOrderIds(joinOrderIds(orderIds));
+        existing.setBillingStatus("DRAFT");
+        existing.setSubtotalAmount(snapshot.subtotal());
+        existing.setTaxAmount(snapshot.tax());
+        existing.setTotalAmount(snapshot.total());
+        existing.setClosedAt(null);
+        BillEntity saved = billRepository.save(existing);
+        replaceBillItems(saved.getBillId(), mergedItems);
+        return toRecord(saved, billItemRepository.findByBillIdOrderByBillItemIdAsc(saved.getBillId()));
+    }
+
+    private void replaceBillItems(String billId, List<BillLineRecord> items) {
+        billItemRepository.deleteByBillId(billId);
+        if (items.isEmpty()) {
+            return;
+        }
+        List<BillItemEntity> entities = items.stream()
+                .map(item -> {
+                    BillItemEntity entity = new BillItemEntity();
+                    BigDecimal unitPrice = scale(item.unitPrice());
+                    BigDecimal lineSubtotal = unitPrice.multiply(BigDecimal.valueOf(item.quantity())).setScale(2, RoundingMode.HALF_UP);
+                    BigDecimal lineTax = lineSubtotal.multiply(DEFAULT_TAX_RATE).setScale(2, RoundingMode.HALF_UP);
+                    entity.setBillItemId("bill-item-" + UUID.randomUUID());
+                    entity.setBillId(billId);
+                    entity.setOrderItemId(null);
+                    entity.setMenuItemId(item.itemId());
+                    entity.setItemName(item.itemName());
+                    entity.setQuantity(item.quantity());
+                    entity.setUnitPrice(unitPrice);
+                    entity.setTaxAmount(lineTax);
+                    entity.setLineTotal(lineSubtotal.add(lineTax));
+                    return entity;
+                })
+                .toList();
+        billItemRepository.saveAll(entities);
+    }
+
+    private Map<String, List<BillItemEntity>> loadItemsByBillId(Collection<String> billIds) {
+        if (billIds.isEmpty()) {
+            return Map.of();
+        }
+        return billItemRepository.findByBillIdIn(billIds).stream()
+                .collect(Collectors.groupingBy(BillItemEntity::getBillId));
+    }
+
+    private BillRecord toRecord(BillEntity bill, List<BillItemEntity> items) {
+        return new BillRecord(
+                bill.getBillId(),
+                bill.getOrderId(),
+                parseOrderIds(bill.getLinkedOrderIds(), bill.getOrderId()),
+                bill.getTenantId(),
+                bill.getPropertyId(),
+                bill.getTableId(),
+                bill.getBillingStatus(),
+                items.stream().map(this::toLineRecord).toList(),
+                scale(bill.getSubtotalAmount()),
+                scale(bill.getTaxAmount()),
+                scale(bill.getTotalAmount())
         );
     }
 
@@ -115,4 +215,67 @@ public class BillingStore {
         );
     }
 
+    private BillLineRecord toLineRecord(BillItemEntity item) {
+        return new BillLineRecord(
+                item.getMenuItemId(),
+                item.getItemName(),
+                item.getQuantity(),
+                scale(item.getUnitPrice())
+        );
+    }
+
+    private List<BillLineRecord> mergeLineItems(List<BillLineRecord> currentItems, List<BillLineRecord> additionalItems) {
+        Map<String, BillLineRecord> merged = new LinkedHashMap<>();
+        currentItems.forEach(item -> merged.put(item.itemId(), item));
+        additionalItems.forEach(item -> merged.compute(
+                item.itemId(),
+                (key, existing) -> existing == null
+                        ? item
+                        : new BillLineRecord(
+                                existing.itemId(),
+                                existing.itemName(),
+                                existing.quantity() + item.quantity(),
+                                existing.unitPrice()
+                        )
+        ));
+        return List.copyOf(merged.values());
+    }
+
+    private List<String> parseOrderIds(String linkedOrderIds, String fallbackOrderId) {
+        if (linkedOrderIds == null || linkedOrderIds.isBlank()) {
+            return fallbackOrderId == null || fallbackOrderId.isBlank() ? List.of() : List.of(fallbackOrderId);
+        }
+        return List.of(linkedOrderIds.split(",")).stream()
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private String joinOrderIds(List<String> orderIds) {
+        return orderIds.stream()
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .collect(Collectors.joining(","));
+    }
+
+    private BillSnapshot summarize(List<BillLineRecord> items) {
+        BigDecimal subtotal = items.stream()
+                .map(item -> scale(item.unitPrice()).multiply(BigDecimal.valueOf(item.quantity())))
+                .reduce(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP), BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal tax = subtotal.multiply(DEFAULT_TAX_RATE).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal total = subtotal.add(tax).setScale(2, RoundingMode.HALF_UP);
+        return new BillSnapshot(subtotal, tax, total);
+    }
+
+    private BigDecimal scale(BigDecimal value) {
+        return value == null
+                ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                : value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private record BillSnapshot(BigDecimal subtotal, BigDecimal tax, BigDecimal total) {
+    }
 }

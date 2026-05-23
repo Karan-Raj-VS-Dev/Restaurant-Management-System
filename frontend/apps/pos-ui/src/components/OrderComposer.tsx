@@ -11,6 +11,7 @@ export function OrderComposer(props: {
   onSubmit: () => Promise<void>;
   busy: boolean;
   note: string | null;
+  alerts?: string[];
 }) {
   const total = props.cart.reduce((sum, line) => {
     const price = props.menuById.get(line.itemId)?.price ?? 0;
@@ -64,6 +65,15 @@ export function OrderComposer(props: {
       </div>
 
       {props.note ? <p className="pos-note">{props.note}</p> : null}
+      {props.alerts && props.alerts.length > 0 ? (
+        <div className="pos-note-list">
+          {props.alerts.map((alert, index) => (
+            <div key={`${alert}-${index}`} className="pos-note-banner">
+              {alert}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -91,6 +91,7 @@ const defaultTableForm: TableSettingPayload = {
 const defaultMenuForm: MenuSettingPayload = {
   itemCode: "",
   itemName: "",
+  categoryName: "",
   description: "",
   price: 0,
   vegetarian: false,
@@ -328,6 +329,7 @@ export function PropertySettingsPage(props: PropertySettingsPageProps) {
         setMenuForm({
           itemCode: item.itemCode,
           itemName: item.itemName,
+          categoryName: item.categoryName ?? "",
           description: item.description,
           price: item.price,
           vegetarian: item.vegetarian,
@@ -640,6 +642,7 @@ export function PropertySettingsPage(props: PropertySettingsPageProps) {
                           <tr>
                             <th>Code</th>
                             <th>Dish</th>
+                            <th>Category</th>
                             <th>Price</th>
                             <th>Ingredients cost</th>
                             <th>Prep</th>
@@ -654,6 +657,7 @@ export function PropertySettingsPage(props: PropertySettingsPageProps) {
                               <tr key={item.menuItemId}>
                                 <td>{item.itemCode}</td>
                                 <td>{item.itemName}</td>
+                                <td>{item.categoryName || "Uncategorized"}</td>
                                 <td>Rs {item.price}</td>
                                 <td>Rs {formatMoney(itemCost)}</td>
                                 <td>{item.prepTimeMinutes} min</td>
@@ -948,6 +952,7 @@ export function PropertySettingsPage(props: PropertySettingsPageProps) {
                       <div className="property-settings-form">
                         <label><span>Dish code</span><input value={menuForm.itemCode} onChange={(event) => setMenuForm({ ...menuForm, itemCode: event.target.value })} /></label>
                         <label><span>Dish name</span><input value={menuForm.itemName} onChange={(event) => setMenuForm({ ...menuForm, itemName: event.target.value })} /></label>
+                        <label><span>Category</span><input placeholder="Italian dishes" value={menuForm.categoryName} onChange={(event) => setMenuForm({ ...menuForm, categoryName: event.target.value })} /></label>
                         <label className="property-settings-form-wide"><span>Description</span><textarea rows={3} value={menuForm.description} onChange={(event) => setMenuForm({ ...menuForm, description: event.target.value })} /></label>
                         <label><span>Price</span><input type="number" value={menuForm.price} onChange={(event) => setMenuForm({ ...menuForm, price: Number(event.target.value) })} /></label>
                         <div className="property-settings-inline-note property-settings-form-wide">

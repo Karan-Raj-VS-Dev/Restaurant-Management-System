@@ -56,11 +56,13 @@ public class KitchenController {
                                               @PathVariable(name = "tenantId", required = false) String scopedTenantId,
                                               @PathVariable(name = "propertyId", required = false) String scopedPropertyId,
                                               @RequestParam(name = "tenantId", required = false) String tenantId,
-                                              @RequestParam(name = "propertyId", required = false) String propertyId) {
+                                              @RequestParam(name = "propertyId", required = false) String propertyId,
+                                              @RequestBody(required = false) UpdateKitchenTicketRequest request) {
         return kitchenService.acceptTicket(
                 resolveTenantId(scopedTenantId, tenantId),
                 resolvePropertyId(scopedPropertyId, propertyId),
-                ticketId
+                ticketId,
+                request
         );
     }
 
@@ -69,8 +71,23 @@ public class KitchenController {
                                            @PathVariable(name = "tenantId", required = false) String scopedTenantId,
                                            @PathVariable(name = "propertyId", required = false) String scopedPropertyId,
                                            @RequestParam(name = "tenantId", required = false) String tenantId,
-                                           @RequestParam(name = "propertyId", required = false) String propertyId) {
+                                           @RequestParam(name = "propertyId", required = false) String propertyId,
+                                           @RequestBody(required = false) UpdateKitchenTicketRequest request) {
         return kitchenService.markReady(
+                resolveTenantId(scopedTenantId, tenantId),
+                resolvePropertyId(scopedPropertyId, propertyId),
+                ticketId,
+                request
+        );
+    }
+
+    @PatchMapping("/tickets/{ticketId}/served")
+    public KitchenTicketResponse markServed(@PathVariable String ticketId,
+                                            @PathVariable(name = "tenantId", required = false) String scopedTenantId,
+                                            @PathVariable(name = "propertyId", required = false) String scopedPropertyId,
+                                            @RequestParam(name = "tenantId", required = false) String tenantId,
+                                            @RequestParam(name = "propertyId", required = false) String propertyId) {
+        return kitchenService.markServed(
                 resolveTenantId(scopedTenantId, tenantId),
                 resolvePropertyId(scopedPropertyId, propertyId),
                 ticketId

@@ -5,36 +5,54 @@ import com.restaurant.platform.eventing.DomainEventPublisher;
 import com.restaurant.platform.eventing.EventEnvelopeFactory;
 import com.restaurant.platform.eventing.EventKeys;
 import com.restaurant.platform.eventing.contract.PaymentSucceededEvent;
+import com.restaurant.payment.persistence.entity.PaymentEntity;
+import com.restaurant.payment.persistence.repository.PaymentRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class PaymentService {
 
-    private final Map<String, PaymentResponse> payments = new ConcurrentHashMap<>();
+    private final PaymentRepository paymentRepository;
     private final EventEnvelopeFactory eventEnvelopeFactory;
     private final DomainEventPublisher domainEventPublisher;
 
-    public PaymentService(EventEnvelopeFactory eventEnvelopeFactory,
+    public PaymentService(PaymentRepository paymentRepository,
+                          EventEnvelopeFactory eventEnvelopeFactory,
                           DomainEventPublisher domainEventPublisher) {
+        this.paymentRepository = paymentRepository;
         this.eventEnvelopeFactory = eventEnvelopeFactory;
         this.domainEventPublisher = domainEventPublisher;
     }
 
     public PaymentResponse processPayment(String tenantId, String propertyId, ProcessPaymentRequest request) {
+        Instant now = Instant.now();
+        PaymentEntity entity = new PaymentEntity();
+        entity.setPaymentId("pay-" + UUID.randomUUID());
+        entity.setBillId(request.billId());
+        entity.setOrderId(null);
+        entity.setTenantId(tenantId);
+        entity.setPropertyId(propertyId);
+        entity.setPaymentReference("ref-" + UUID.randomUUID());
+        entity.setPaymentMethod(request.method().name());
+        entity.setPaymentStatus(PaymentStatus.SUCCESS.name());
+        entity.setAmount(request.amount());
+        entity.setCurrencyCode("INR");
+        entity.setPaidAt(now);
+        entity.setCreatedAt(now);
+        entity.setUpdatedAt(now);
+        PaymentEntity saved = paymentRepository.save(entity);
+
         PaymentResponse response = new PaymentResponse(
-                "pay-" + UUID.randomUUID(),
-                request.billId(),
-                request.method(),
-                PaymentStatus.SUCCESS,
-                request.amount(),
-                Instant.now()
+                saved.getPaymentId(),
+                saved.getBillId(),
+                PaymentMethod.valueOf(saved.getPaymentMethod()),
+                PaymentStatus.valueOf(saved.getPaymentStatus()),
+                saved.getAmount(),
+                saved.getPaidAt()
         );
-        payments.put(response.paymentId(), response);
 
         domainEventPublisher.publish(eventEnvelopeFactory.create(
                 EventKeys.PAYMENT_SUCCEEDED,

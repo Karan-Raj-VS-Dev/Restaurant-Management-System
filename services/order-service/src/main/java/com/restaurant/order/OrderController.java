@@ -77,6 +77,32 @@ public class OrderController {
         );
     }
 
+    @PatchMapping("/{orderId}/ready-to-serve")
+    public OrderResponse markReadyToServe(@PathVariable String orderId,
+                                          @PathVariable(name = "tenantId", required = false) String scopedTenantId,
+                                          @PathVariable(name = "propertyId", required = false) String scopedPropertyId,
+                                          @RequestParam(name = "tenantId", required = false) String tenantId,
+                                          @RequestParam(name = "propertyId", required = false) String propertyId) {
+        return orderService.markReadyToServe(
+                resolveTenantId(scopedTenantId, tenantId),
+                resolvePropertyId(scopedPropertyId, propertyId),
+                orderId
+        );
+    }
+
+    @PatchMapping("/{orderId}/served")
+    public OrderResponse markServed(@PathVariable String orderId,
+                                    @PathVariable(name = "tenantId", required = false) String scopedTenantId,
+                                    @PathVariable(name = "propertyId", required = false) String scopedPropertyId,
+                                    @RequestParam(name = "tenantId", required = false) String tenantId,
+                                    @RequestParam(name = "propertyId", required = false) String propertyId) {
+        return orderService.markServed(
+                resolveTenantId(scopedTenantId, tenantId),
+                resolvePropertyId(scopedPropertyId, propertyId),
+                orderId
+        );
+    }
+
     private String resolveTenantId(String pathTenantId, String requestTenantId) {
         if (pathTenantId != null && !pathTenantId.isBlank()) {
             return pathTenantId;

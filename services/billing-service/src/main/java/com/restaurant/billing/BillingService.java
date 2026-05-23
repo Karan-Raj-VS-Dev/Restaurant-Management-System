@@ -89,6 +89,7 @@ public class BillingService {
         return new BillResponse(
                 bill.billId(),
                 bill.orderId(),
+                bill.orderIds(),
                 bill.tableId(),
                 BillStatus.valueOf(bill.status()),
                 bill.items().stream()

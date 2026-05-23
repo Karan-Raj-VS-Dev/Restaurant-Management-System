@@ -6,6 +6,7 @@ import java.util.List;
 public record BillRecord(
         String billId,
         String orderId,
+        List<String> orderIds,
         String tenantId,
         String propertyId,
         String tableId,

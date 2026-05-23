@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button, StatusPill } from "@restaurant/ui";
 import type { TableRecord } from "@restaurant/api";
 
@@ -28,6 +28,7 @@ export function TableBoard(props: {
   waiterNameById: Map<string, string>;
   cleanerNameById: Map<string, string>;
   statusMessage: string | null;
+  statusMessageFading: boolean;
   reservationOverridePending: boolean;
   busyStatusChange: boolean;
   onOccupyNow: (overrideReservationWarning?: boolean) => Promise<boolean>;
@@ -38,6 +39,7 @@ export function TableBoard(props: {
   onMarkAvailableNow: () => Promise<boolean>;
 }) {
   const [activeModal, setActiveModal] = useState<"occupy" | "reserve" | "cleaning" | "available" | null>(null);
+  const [now, setNow] = useState(Date.now());
   const selectedWaiterName = useMemo(
     () => (props.selectedWaiterId ? props.waiterNameById.get(props.selectedWaiterId) ?? props.selectedWaiterId : null),
     [props.selectedWaiterId, props.waiterNameById]
@@ -46,6 +48,25 @@ export function TableBoard(props: {
     () => (props.selectedCleanerId ? props.cleanerNameById.get(props.selectedCleanerId) ?? props.selectedCleanerId : null),
     [props.selectedCleanerId, props.cleanerNameById]
   );
+  const pendingTimer = useMemo(() => {
+    if (!props.selectedTable?.pendingStatus || !props.selectedTable.pendingStatusAt) {
+      return null;
+    }
+    const totalMs = props.selectedTable.pendingStatus === "AVAILABLE" ? 5 * 60 * 1000 : 2 * 60 * 1000;
+    const remainingMs = Math.max(0, new Date(props.selectedTable.pendingStatusAt).getTime() - now);
+    return {
+      remainingMs,
+      progressPercent: totalMs <= 0 ? 100 : Math.max(0, Math.min(100, ((totalMs - remainingMs) / totalMs) * 100))
+    };
+  }, [now, props.selectedTable?.pendingStatus, props.selectedTable?.pendingStatusAt]);
+
+  useEffect(() => {
+    if (!props.selectedTable?.pendingStatusAt) {
+      return;
+    }
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [props.selectedTable?.pendingStatusAt]);
 
   const runAndCloseOnSuccess = async (action: () => Promise<boolean>) => {
     const success = await action();
@@ -169,12 +190,35 @@ export function TableBoard(props: {
             ) : null}
           </div>
 
-          {props.statusMessage ? <div className="pos-status-banner">{props.statusMessage}</div> : null}
+          {pendingTimer && props.selectedTable.pendingStatus ? (
+            <div className="pos-table-timer-block">
+              <div className="pos-table-timer-meta">
+                <span>
+                  {props.selectedTable.pendingStatus === "AVAILABLE"
+                    ? "Cleaner cycle in progress"
+                    : "Payment cool-down in progress"}
+                </span>
+                <strong>{formatRemaining(pendingTimer.remainingMs)}</strong>
+              </div>
+              <div className="pos-table-timer-track" aria-hidden="true">
+                <div
+                  className={`pos-table-timer-fill pos-table-timer-fill-${props.selectedTable.pendingStatus === "AVAILABLE" ? "available" : "cleaning"}`}
+                  style={{ width: `${pendingTimer.progressPercent}%` }}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {props.statusMessage ? <div className={`pos-status-banner ${props.statusMessageFading ? "fading" : ""}`}>{props.statusMessage}</div> : null}
 
           <div className="pos-table-status-actions">
             <Button
               variant="primary"
-              disabled={props.busyStatusChange || props.selectedTable.status === "UNAVAILABLE"}
+              disabled={
+                props.busyStatusChange ||
+                props.selectedTable.status === "UNAVAILABLE" ||
+                props.selectedTable.status === "OCCUPIED"
+              }
               onClick={() => setActiveModal("occupy")}
             >
               {props.reservationOverridePending ? "Override occupy" : "Occupy table"}
@@ -239,7 +283,7 @@ export function TableBoard(props: {
                     <strong>Server</strong>
                     <span>{selectedWaiterName ?? "Choose a server from the top selector before confirming."}</span>
                   </div>
-                  {props.statusMessage ? <div className="pos-status-banner">{props.statusMessage}</div> : null}
+                  {props.statusMessage ? <div className={`pos-status-banner ${props.statusMessageFading ? "fading" : ""}`}>{props.statusMessage}</div> : null}
                   <div className="pos-table-modal-actions">
                     <Button variant="ghost" onClick={() => setActiveModal(null)}>
                       Cancel
@@ -279,7 +323,7 @@ export function TableBoard(props: {
                       />
                     </label>
                   </div>
-                  {props.statusMessage ? <div className="pos-status-banner">{props.statusMessage}</div> : null}
+                  {props.statusMessage ? <div className={`pos-status-banner ${props.statusMessageFading ? "fading" : ""}`}>{props.statusMessage}</div> : null}
                   <div className="pos-table-modal-actions">
                     <Button variant="ghost" onClick={() => setActiveModal(null)}>
                       Cancel
@@ -296,7 +340,7 @@ export function TableBoard(props: {
                   <p className="pos-inline-note">
                     Move the table into the cleaning workflow either immediately or after the short cool-down.
                   </p>
-                  {props.statusMessage ? <div className="pos-status-banner">{props.statusMessage}</div> : null}
+                  {props.statusMessage ? <div className={`pos-status-banner ${props.statusMessageFading ? "fading" : ""}`}>{props.statusMessage}</div> : null}
                   <div className="pos-table-modal-actions">
                     <Button variant="ghost" onClick={() => setActiveModal(null)}>
                       Cancel
@@ -320,6 +364,14 @@ export function TableBoard(props: {
                   <p className="pos-inline-note">
                     Choose the cleaner who is returning this table to service, then mark it available now or after the cleaner cycle.
                   </p>
+                  {props.selectedTable.pendingStatus === "AVAILABLE" && props.selectedTable.pendingStatusAt ? (
+                    <div className="pos-table-modal-note">
+                      <strong>Cleaner cycle already scheduled</strong>
+                      <span>
+                        This table is already set to return at {formatReservationTime(props.selectedTable.pendingStatusAt)}. You can still make it available immediately.
+                      </span>
+                    </div>
+                  ) : null}
                   <label className="pos-table-filter">
                     <span>Cleaner</span>
                     <select value={props.selectedCleanerId} onChange={(event) => props.onCleanerChange(event.target.value)}>
@@ -331,17 +383,21 @@ export function TableBoard(props: {
                       ))}
                     </select>
                   </label>
-                  {props.statusMessage ? <div className="pos-status-banner">{props.statusMessage}</div> : null}
+                  {props.statusMessage ? <div className={`pos-status-banner ${props.statusMessageFading ? "fading" : ""}`}>{props.statusMessage}</div> : null}
                   <div className="pos-table-modal-actions">
                     <Button variant="ghost" onClick={() => setActiveModal(null)}>
                       Cancel
                     </Button>
                     <Button
                       variant="secondary"
-                      disabled={props.busyStatusChange || !props.selectedCleanerId}
+                      disabled={
+                        props.busyStatusChange ||
+                        !props.selectedCleanerId ||
+                        props.selectedTable.pendingStatus === "AVAILABLE"
+                      }
                       onClick={() => runAndCloseOnSuccess(props.onScheduleCleanerReady)}
                     >
-                      Cleaner cycle 5 min
+                      {props.selectedTable.pendingStatus === "AVAILABLE" ? "Cleaner cycle running" : "Cleaner cycle 5 min"}
                     </Button>
                     <Button
                       disabled={props.busyStatusChange || !props.selectedCleanerId}
@@ -407,4 +463,17 @@ function formatReservationTime(value: string) {
     hour: "numeric",
     minute: "2-digit"
   });
+}
+
+function formatRemaining(remainingMs: number) {
+  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes <= 0) {
+    return `${seconds}s`;
+  }
+  if (seconds === 0) {
+    return `${minutes}m`;
+  }
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
 }

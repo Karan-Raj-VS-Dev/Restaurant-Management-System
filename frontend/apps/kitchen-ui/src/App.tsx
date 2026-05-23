@@ -1,7 +1,7 @@
-import { acceptKitchenTicket, loadKitchenSnapshot, readyKitchenTicket, type AuthSession } from "@restaurant/api";
+import { acceptKitchenTicket, buildKitchenTicketDetails, loadKitchenSnapshot, markOrderReadyToServe, readyKitchenTicket, type AuthSession, type KitchenTicketDetail } from "@restaurant/api";
 import { DashboardContext, OperationalAccessGate, OperationalShellActions, useOperationalSessionBootstrap } from "../../../packages/operations/src";
-import { AppShell, Button, LivePulse, SectionCard, StatCard, usePollingResource } from "@restaurant/ui";
-import { useState } from "react";
+import { AppShell, Button, LivePulse, SectionCard, StatCard, StatusPill, usePollingResource } from "@restaurant/ui";
+import { useMemo, useState } from "react";
 import { StockHealthPanel } from "./components/StockHealthPanel";
 import { TicketLane } from "./components/TicketLane";
 
@@ -31,30 +31,47 @@ export default function App() {
 function AuthenticatedKitchenDashboard(props: { session: AuthSession; dashboardContext: DashboardContext }) {
   const { data, loading, refreshing, error, lastUpdated, refresh } = usePollingResource(loadKitchenSnapshot, 4000);
   const [busyTicketId, setBusyTicketId] = useState<string | null>(null);
+  const [selectedCookByTicketId, setSelectedCookByTicketId] = useState<Record<string, string>>({});
+  const cookOptions = useMemo(
+    () =>
+      (data?.employees ?? [])
+        .filter((employee) => employee.role === "COOK" && (employee.employmentStatus ?? "ACTIVE") === "ACTIVE")
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map((employee) => ({ employeeId: employee.employeeId, name: employee.name })),
+    [data?.employees]
+  );
 
-  const handleAccept = async (ticketId: string) => {
-    setBusyTicketId(ticketId);
+  const handleAccept = async (ticket: KitchenTicketDetail, cookId: string | null) => {
+    setBusyTicketId(ticket.ticketId);
     try {
-      await acceptKitchenTicket(ticketId);
+      await acceptKitchenTicket(ticket.ticketId, cookId);
       await refresh();
     } finally {
       setBusyTicketId(null);
     }
   };
 
-  const handleReady = async (ticketId: string) => {
-    setBusyTicketId(ticketId);
+  const handleReady = async (ticket: KitchenTicketDetail, cookId: string | null) => {
+    setBusyTicketId(ticket.ticketId);
     try {
-      await readyKitchenTicket(ticketId);
+      await readyKitchenTicket(ticket.ticketId, cookId);
+      await markOrderReadyToServe(ticket.orderId);
       await refresh();
     } finally {
       setBusyTicketId(null);
     }
   };
 
-  const received = (data?.tickets ?? []).filter((ticket) => ticket.status === "RECEIVED");
-  const active = (data?.tickets ?? []).filter((ticket) => ticket.status === "ACCEPTED" || ticket.status === "PREPARING");
-  const ready = (data?.tickets ?? []).filter((ticket) => ticket.status === "READY");
+  const ticketDetails = useMemo(
+    () => buildKitchenTicketDetails(data?.tickets ?? [], data?.orders ?? [], data?.tables ?? [], data?.employees ?? []),
+    [data?.employees, data?.orders, data?.tables, data?.tickets]
+  );
+  const received = ticketDetails.filter((ticket) => ticket.status === "RECEIVED");
+  const active = ticketDetails.filter((ticket) => ticket.status === "ACCEPTED" || ticket.status === "PREPARING");
+  const ready = ticketDetails.filter((ticket) => ticket.status === "READY");
+  const completed = [...ticketDetails]
+    .filter((ticket) => ticket.status === "SERVED")
+    .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
 
   return (
     <div className="kitchen-theme">
@@ -81,16 +98,124 @@ function AuthenticatedKitchenDashboard(props: { session: AuthSession; dashboardC
         <div className="kitchen-layout">
           <SectionCard title="Kitchen lanes" subtitle="Tickets move left to right as the team accepts and finishes work.">
             <div className="kitchen-lanes-grid">
-              <TicketLane title="Received" tone="info" tickets={received} onAccept={handleAccept} onReady={handleReady} busyTicketId={busyTicketId} />
-              <TicketLane title="Preparing" tone="warning" tickets={active} onAccept={handleAccept} onReady={handleReady} busyTicketId={busyTicketId} />
-              <TicketLane title="Ready" tone="success" tickets={ready} onAccept={handleAccept} onReady={handleReady} busyTicketId={busyTicketId} />
+              <TicketLane
+                title="Received"
+                tone="info"
+                tickets={received}
+                cookOptions={cookOptions}
+                selectedCookByTicketId={selectedCookByTicketId}
+                onCookChange={(ticketId, cookId) => setSelectedCookByTicketId((current) => ({ ...current, [ticketId]: cookId }))}
+                onAccept={handleAccept}
+                onReady={handleReady}
+                busyTicketId={busyTicketId}
+                urgencyMode="received"
+              />
+              <TicketLane
+                title="Preparing"
+                tone="warning"
+                tickets={active}
+                cookOptions={cookOptions}
+                selectedCookByTicketId={selectedCookByTicketId}
+                onCookChange={(ticketId, cookId) => setSelectedCookByTicketId((current) => ({ ...current, [ticketId]: cookId }))}
+                onAccept={handleAccept}
+                onReady={handleReady}
+                busyTicketId={busyTicketId}
+              />
+              <TicketLane
+                title="Ready"
+                tone="success"
+                tickets={ready}
+                cookOptions={cookOptions}
+                selectedCookByTicketId={selectedCookByTicketId}
+                onCookChange={(ticketId, cookId) => setSelectedCookByTicketId((current) => ({ ...current, [ticketId]: cookId }))}
+                onAccept={handleAccept}
+                onReady={handleReady}
+                busyTicketId={busyTicketId}
+              />
             </div>
           </SectionCard>
 
-          <SectionCard title="Stock health" subtitle="Live ingredient stock from the inventory service, including low-threshold and over-capacity alerts.">
-            {loading && !data ? <p className="kitchen-inline-note">Loading kitchen view...</p> : <StockHealthPanel stock={data?.stock ?? []} />}
-            {error ? <p className="kitchen-error">Kitchen live services are partially unavailable. {error}</p> : null}
-          </SectionCard>
+          <div className="kitchen-right-column">
+            <SectionCard
+              title="Ready for pickup"
+              subtitle="Use this pass view to match ready dishes with the correct table and server."
+              action={<StatusPill tone="success">{ready.length} waiting</StatusPill>}
+            >
+              {ready.length === 0 ? (
+                <p className="kitchen-inline-note">Chef-ready dishes will appear here with their table and server details.</p>
+              ) : (
+                <div className="kitchen-pickup-stack">
+                  {ready.map((entry) => (
+                    <article key={entry.ticketId} className="kitchen-pickup-card">
+                      <div className="kitchen-pickup-head">
+                        <div>
+                          <h3>{entry.tableName}</h3>
+                          <p>
+                            {entry.tableNumber} · {entry.waiterName}
+                          </p>
+                        </div>
+                        <StatusPill tone="success">Ready</StatusPill>
+                      </div>
+                      {entry.items.length === 0 ? (
+                        <p className="kitchen-inline-note">Dish details are syncing from the order.</p>
+                      ) : (
+                        <ul className="kitchen-pickup-items">
+                          {entry.items.map((item) => (
+                            <li key={`${entry.ticketId}-${item.itemId}`}>{item.quantity}× {item.itemName}</li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="kitchen-pickup-chef">Chef {entry.cookName}</p>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+
+            <SectionCard
+              title="Completed orders"
+              subtitle="Served dishes land here so the kitchen can confirm what has already left the pass."
+              action={<StatusPill tone="neutral">{completed.length} completed</StatusPill>}
+            >
+              {completed.length === 0 ? (
+                <p className="kitchen-inline-note">Completed orders will appear here after service marks the ready dishes as served.</p>
+              ) : (
+                <div className="kitchen-pickup-stack">
+                  {completed.map((entry) => (
+                    <article key={entry.ticketId} className="kitchen-pickup-card kitchen-pickup-card-completed">
+                      <div className="kitchen-pickup-head">
+                        <div>
+                          <h3>{entry.tableName}</h3>
+                          <p>
+                            {entry.tableNumber} · {entry.waiterName}
+                          </p>
+                        </div>
+                        <StatusPill tone="neutral">Served</StatusPill>
+                      </div>
+                      {entry.items.length === 0 ? (
+                        <p className="kitchen-inline-note">Dish details are syncing from the order.</p>
+                      ) : (
+                        <ul className="kitchen-pickup-items">
+                          {entry.items.map((item) => (
+                            <li key={`${entry.ticketId}-${item.itemId}`}>{item.quantity}× {item.itemName}</li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="kitchen-pickup-chef">Chef {entry.cookName}</p>
+                      <p className="kitchen-pickup-timestamp">
+                        Served at {new Date(entry.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+
+            <SectionCard title="Stock health" subtitle="Live ingredient stock from the inventory service, including low-threshold and over-capacity alerts.">
+              {loading && !data ? <p className="kitchen-inline-note">Loading kitchen view...</p> : <StockHealthPanel stock={data?.stock ?? []} />}
+              {error ? <p className="kitchen-error">Kitchen live services are partially unavailable. {error}</p> : null}
+            </SectionCard>
+          </div>
         </div>
       </AppShell>
     </div>

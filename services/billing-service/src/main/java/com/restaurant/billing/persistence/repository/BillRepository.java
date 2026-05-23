@@ -10,4 +10,13 @@ public interface BillRepository extends JpaRepository<BillEntity, String> {
     Optional<BillEntity> findByOrderId(String orderId);
 
     List<BillEntity> findByTenantIdAndPropertyIdAndBillingStatus(String tenantId, String propertyId, String billingStatus);
+
+    List<BillEntity> findByTenantIdAndPropertyIdOrderByGeneratedAtDesc(String tenantId, String propertyId);
+
+    Optional<BillEntity> findFirstByTenantIdAndPropertyIdAndTableIdAndBillingStatusInOrderByGeneratedAtDesc(
+            String tenantId,
+            String propertyId,
+            String tableId,
+            List<String> billingStatuses
+    );
 }

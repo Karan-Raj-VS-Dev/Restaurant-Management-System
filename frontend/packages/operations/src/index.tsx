@@ -102,8 +102,8 @@ export function OperationalAccessGate(props: {
           ) : null}
           <div className="operations-toolbar">
             <Button disabled>{props.bootLoading ? "Checking session..." : "Restaurant sign-in required"}</Button>
-            <Button variant="ghost" onClick={() => (window.location.href = buildRestaurantAppUrl())}>
-              Back to restaurant app
+            <Button variant="ghost" onClick={() => (window.location.href = buildRestaurantAppUrl("signin"))}>
+              Back to restaurant sign in
             </Button>
           </div>
         </SectionCard>
@@ -163,7 +163,7 @@ export function buildDashboardHref(baseUrl: string, session: AuthSession, select
   return `${baseUrl}?${params.toString()}`;
 }
 
-export function buildRestaurantAppUrl(action?: "change-property" | "logout") {
+export function buildRestaurantAppUrl(action?: "change-property" | "logout" | "signin") {
   const url = new URL("http://127.0.0.1:5176");
   if (action) {
     url.searchParams.set("action", action);

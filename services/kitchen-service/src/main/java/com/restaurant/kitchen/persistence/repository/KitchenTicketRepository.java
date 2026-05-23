@@ -10,4 +10,6 @@ public interface KitchenTicketRepository extends JpaRepository<KitchenTicketEnti
     Optional<KitchenTicketEntity> findByOrderId(String orderId);
 
     List<KitchenTicketEntity> findByTenantIdAndPropertyIdAndTicketStatus(String tenantId, String propertyId, String ticketStatus);
+
+    List<KitchenTicketEntity> findByTenantIdAndPropertyIdOrderByCreatedAtAsc(String tenantId, String propertyId);
 }

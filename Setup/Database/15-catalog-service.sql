@@ -158,6 +158,17 @@ SELECT 'item-002', 'bikini-bottom', 'krusty-krab', 'PASTA-ALFREDO', 'Pasta Alfre
        'Creamy pasta finished with parmesan and pepper.', 249.00, FALSE, TRUE, 14
 WHERE NOT EXISTS (SELECT 1 FROM menu_items WHERE menu_item_id = 'item-002');
 
+INSERT INTO menu_categories (
+    category_id, tenant_id, property_id, category_name, display_order, is_active
+)
+SELECT 'cat-italian-dishes', 'bikini-bottom', 'krusty-krab', 'Italian dishes', 1, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM menu_categories WHERE category_id = 'cat-italian-dishes');
+
+UPDATE menu_items
+SET category_id = 'cat-italian-dishes'
+WHERE menu_item_id IN ('item-001', 'item-002')
+  AND (category_id IS NULL OR category_id <> 'cat-italian-dishes');
+
 INSERT INTO recipe_ingredients (
     recipe_ingredient_id, menu_item_id, ingredient_id, quantity_required, wastage_factor
 )

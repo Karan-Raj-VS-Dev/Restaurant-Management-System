@@ -7,6 +7,8 @@ public record MenuSettingsItemResponse(
         String menuItemId,
         String itemCode,
         String itemName,
+        String categoryId,
+        String categoryName,
         String description,
         BigDecimal price,
         int recipeCount,

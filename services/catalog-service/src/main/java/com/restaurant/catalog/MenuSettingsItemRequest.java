@@ -6,6 +6,7 @@ import java.util.List;
 public record MenuSettingsItemRequest(
         String itemCode,
         String itemName,
+        String categoryName,
         String description,
         BigDecimal price,
         boolean vegetarian,

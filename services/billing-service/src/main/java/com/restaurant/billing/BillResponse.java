@@ -6,6 +6,7 @@ import java.util.List;
 public record BillResponse(
         String billId,
         String orderId,
+        List<String> orderIds,
         String tableId,
         BillStatus status,
         List<BillLine> items,

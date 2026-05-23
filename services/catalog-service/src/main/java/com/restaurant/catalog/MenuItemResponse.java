@@ -7,6 +7,8 @@ public record MenuItemResponse(
         String itemId,
         String propertyId,
         String name,
+        String categoryId,
+        String categoryName,
         BigDecimal price,
         boolean available,
         List<RecipeIngredient> recipe

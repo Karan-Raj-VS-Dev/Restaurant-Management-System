@@ -56,7 +56,7 @@ export default function App() {
       return;
     }
 
-    if (action === "logout") {
+    if (action === "logout" || action === "signin") {
       clearFrontendAuthState("restaurant-ui");
       clearRuntimeScope();
       clearStoredRestaurantSelection();

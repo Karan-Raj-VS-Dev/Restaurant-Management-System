@@ -1,13 +1,10 @@
 package com.restaurant.employee.bootstrap;
 
 import com.restaurant.employee.persistence.entity.EmployeeEntity;
-import com.restaurant.employee.persistence.entity.EmployeeShiftEntity;
 import com.restaurant.employee.persistence.repository.EmployeeRepository;
-import com.restaurant.employee.persistence.repository.EmployeeShiftRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,14 +17,9 @@ public class EmployeeSeedInitializer implements CommandLineRunner {
     private static final String PROPERTY_ID = "krusty-krab";
 
     private final EmployeeRepository employeeRepository;
-    private final EmployeeShiftRepository employeeShiftRepository;
 
-    public EmployeeSeedInitializer(
-            EmployeeRepository employeeRepository,
-            EmployeeShiftRepository employeeShiftRepository
-    ) {
+    public EmployeeSeedInitializer(EmployeeRepository employeeRepository) {
         this.employeeRepository = employeeRepository;
-        this.employeeShiftRepository = employeeShiftRepository;
     }
 
     @Override
@@ -48,20 +40,6 @@ public class EmployeeSeedInitializer implements CommandLineRunner {
             entity.setAvailable(true);
             entity.setHireDate(LocalDate.now());
             employeeRepository.save(entity);
-        }
-
-        EmployeeShiftEntity shift = new EmployeeShiftEntity();
-        shift.setShiftId("shift-neha-normal");
-        shift.setEmployeeId(entity.getEmployeeId());
-        shift.setTenantId(TENANT_ID);
-        shift.setPropertyId(PROPERTY_ID);
-        shift.setShiftName("Normal Shift");
-        shift.setShiftDate(LocalDate.now());
-        shift.setStartTime(LocalDate.now().atTime(9, 0).toInstant(ZoneOffset.UTC));
-        shift.setEndTime(LocalDate.now().atTime(18, 0).toInstant(ZoneOffset.UTC));
-        shift.setShiftStatus("SCHEDULED");
-        if (!employeeShiftRepository.existsById("shift-neha-normal")) {
-            employeeShiftRepository.save(shift);
         }
     }
 }

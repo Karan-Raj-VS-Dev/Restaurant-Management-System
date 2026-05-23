@@ -86,6 +86,85 @@ public class InventoryProjection {
         return availability;
     }
 
+    public MenuOrderValidationResponse validateMenuOrder(String tenantId, String propertyId, List<ValidateMenuOrderItemRequest> items) {
+        if (items == null || items.isEmpty()) {
+            return new MenuOrderValidationResponse(true, List.of());
+        }
+
+        Map<String, IngredientStockRecord> workingStockByIngredient = listStock(tenantId, propertyId).stream()
+                .collect(Collectors.toMap(IngredientStockRecord::ingredientId, Function.identity()));
+        Map<String, List<RecipeRequirement>> recipeByItemId = loadRecipeRequirements(
+                tenantId,
+                propertyId,
+                items.stream().map(ValidateMenuOrderItemRequest::itemId).distinct().toList()
+        );
+
+        List<MenuOrderValidationItemResponse> issues = new ArrayList<>();
+        for (ValidateMenuOrderItemRequest item : items) {
+            List<RecipeRequirement> recipe = recipeByItemId.getOrDefault(item.itemId(), List.of());
+            if (recipe.isEmpty()) {
+                issues.add(new MenuOrderValidationItemResponse(
+                        item.itemId(),
+                        item.itemName(),
+                        item.quantity(),
+                        0,
+                        List.of("Recipe not configured"),
+                        item.itemName() + " cannot be ordered because the recipe is not configured yet."
+                ));
+                continue;
+            }
+
+            int maxServableQuantity = Integer.MAX_VALUE;
+            List<String> shortageIngredients = new ArrayList<>();
+            boolean available = true;
+
+            for (RecipeRequirement requirement : recipe) {
+                IngredientStockRecord stock = workingStockByIngredient.get(requirement.ingredientId());
+                int availableQuantity = stock != null ? stock.currentQuantity() : 0;
+                int possibleQuantity = requirement.quantity() <= 0 ? item.quantity() : availableQuantity / requirement.quantity();
+                maxServableQuantity = Math.min(maxServableQuantity, possibleQuantity);
+
+                if (availableQuantity < requirement.quantity() * item.quantity()) {
+                    available = false;
+                    shortageIngredients.add(requirement.ingredientName());
+                }
+            }
+
+            if (!available) {
+                issues.add(new MenuOrderValidationItemResponse(
+                        item.itemId(),
+                        item.itemName(),
+                        item.quantity(),
+                        Math.max(0, maxServableQuantity == Integer.MAX_VALUE ? 0 : maxServableQuantity),
+                        List.copyOf(shortageIngredients),
+                        buildValidationMessage(item.itemName(), maxServableQuantity, shortageIngredients)
+                ));
+                continue;
+            }
+
+            for (RecipeRequirement requirement : recipe) {
+                IngredientStockRecord stock = workingStockByIngredient.get(requirement.ingredientId());
+                if (stock == null) {
+                    continue;
+                }
+                int nextQuantity = Math.max(0, stock.currentQuantity() - requirement.quantity() * item.quantity());
+                workingStockByIngredient.put(requirement.ingredientId(), new IngredientStockRecord(
+                        stock.ingredientId(),
+                        stock.tenantId(),
+                        stock.propertyId(),
+                        stock.ingredientName(),
+                        nextQuantity,
+                        stock.unit(),
+                        stock.reorderThreshold(),
+                        stock.maximumCapacity(),
+                        stock.marketUnitPrice()
+                ));
+            }
+        }
+
+        return new MenuOrderValidationResponse(issues.isEmpty(), List.copyOf(issues));
+    }
+
     public ReservationResult reserveForOrder(OrderSubmittedToKitchenEvent event) {
         Map<String, List<RecipeRequirement>> recipeByItemId = loadRecipeRequirements(
                 event.tenantId(),
@@ -331,6 +410,19 @@ public class InventoryProjection {
 
     private int toInteger(BigDecimal value) {
         return value == null ? 0 : value.intValue();
+    }
+
+    private String buildValidationMessage(String itemName, int maxServableQuantity, List<String> shortageIngredients) {
+        String ingredientSummary = shortageIngredients.isEmpty()
+                ? "ingredient stock is not sufficient"
+                : String.join(", ", shortageIngredients) + " are low on stock";
+        if (maxServableQuantity <= 0) {
+            return itemName + " cannot be placed right now because " + ingredientSummary + ".";
+        }
+        if (maxServableQuantity == 1) {
+            return "Only 1 " + itemName + " can be placed right now because " + ingredientSummary + ".";
+        }
+        return "Only " + maxServableQuantity + " " + itemName + " dishes can be placed right now because " + ingredientSummary + ".";
     }
 
     private String randomId() {

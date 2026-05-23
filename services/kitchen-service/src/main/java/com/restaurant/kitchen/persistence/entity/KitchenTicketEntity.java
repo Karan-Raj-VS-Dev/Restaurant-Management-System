@@ -3,6 +3,8 @@ package com.restaurant.kitchen.persistence.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
 
@@ -26,12 +28,6 @@ public class KitchenTicketEntity {
     @Column(name = "table_id", length = 64)
     private String tableId;
 
-    @Column(name = "station_name", length = 64)
-    private String stationName;
-
-    @Column(name = "priority_level", nullable = false, length = 32)
-    private String priorityLevel;
-
     @Column(name = "ticket_status", nullable = false, length = 32)
     private String ticketStatus;
 
@@ -51,5 +47,130 @@ public class KitchenTicketEntity {
     private Instant completedAt;
 
     protected KitchenTicketEntity() {
+    }
+
+    @PrePersist
+    void onCreate() {
+        if (createdAt == null) {
+            createdAt = Instant.now();
+        }
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        if (readyAt == null && "READY".equals(ticketStatus)) {
+            readyAt = Instant.now();
+        }
+        if (completedAt == null && "SERVED".equals(ticketStatus)) {
+            completedAt = Instant.now();
+        }
+    }
+
+    public String getTicketId() {
+        return ticketId;
+    }
+
+    public void setTicketId(String ticketId) {
+        this.ticketId = ticketId;
+    }
+
+    public String getOrderId() {
+        return orderId;
+    }
+
+    public void setOrderId(String orderId) {
+        this.orderId = orderId;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
+
+    public String getPropertyId() {
+        return propertyId;
+    }
+
+    public void setPropertyId(String propertyId) {
+        this.propertyId = propertyId;
+    }
+
+    public String getTableId() {
+        return tableId;
+    }
+
+    public void setTableId(String tableId) {
+        this.tableId = tableId;
+    }
+
+    public String getTicketStatus() {
+        return ticketStatus;
+    }
+
+    public void setTicketStatus(String ticketStatus) {
+        this.ticketStatus = ticketStatus;
+    }
+
+    public String getAssignedCookId() {
+        return assignedCookId;
+    }
+
+    public void setAssignedCookId(String assignedCookId) {
+        this.assignedCookId = assignedCookId;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public Instant getAcceptedAt() {
+        return acceptedAt;
+    }
+
+    public void setAcceptedAt(Instant acceptedAt) {
+        this.acceptedAt = acceptedAt;
+    }
+
+    public Instant getReadyAt() {
+        return readyAt;
+    }
+
+    public void setReadyAt(Instant readyAt) {
+        this.readyAt = readyAt;
+    }
+
+    public Instant getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(Instant completedAt) {
+        this.completedAt = completedAt;
+    }
+
+    public static KitchenTicketEntity create(String ticketId,
+                                             String orderId,
+                                             String tenantId,
+                                             String propertyId,
+                                             String tableId,
+                                             String ticketStatus,
+                                             String assignedCookId,
+                                             Instant createdAt) {
+        KitchenTicketEntity entity = new KitchenTicketEntity();
+        entity.setTicketId(ticketId);
+        entity.setOrderId(orderId);
+        entity.setTenantId(tenantId);
+        entity.setPropertyId(propertyId);
+        entity.setTableId(tableId);
+        entity.setTicketStatus(ticketStatus);
+        entity.setAssignedCookId(assignedCookId);
+        entity.setCreatedAt(createdAt);
+        return entity;
     }
 }

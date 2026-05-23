@@ -67,6 +67,10 @@ public class InventoryService {
                 .toList();
     }
 
+    public MenuOrderValidationResponse validateMenuOrder(String tenantId, String propertyId, ValidateMenuOrderRequest request) {
+        return inventoryProjection.validateMenuOrder(tenantId, propertyId, request.items());
+    }
+
     public InventorySettingsSummaryResponse getSettingsSummary(String tenantId, String propertyId) {
         List<IngredientStockRecord> stockRecords = inventoryProjection.listStock(tenantId, propertyId);
         Map<String, com.restaurant.inventory.persistence.entity.CatalogIngredientEntity> catalogIngredientsById = stockRecords.isEmpty()

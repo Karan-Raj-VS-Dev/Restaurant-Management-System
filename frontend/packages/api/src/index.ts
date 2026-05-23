@@ -32,6 +32,7 @@ export interface RuntimeScope {
 export type TableStatus = "AVAILABLE" | "UNAVAILABLE" | "RESERVED" | "OCCUPIED" | "NEEDS_CLEANING";
 export type KitchenStatus = "RECEIVED" | "ACCEPTED" | "PREPARING" | "READY" | "SERVED";
 export type BillStatus = "DRAFT" | "FINALIZED" | "PAID";
+export type PaymentMethod = "CASH" | "CARD" | "UPI" | "WALLET";
 
 export interface TableRecord {
   tableId: string;
@@ -70,6 +71,8 @@ export interface MenuItem {
   itemId: string;
   propertyId: string;
   name: string;
+  categoryId: string | null;
+  categoryName: string | null;
   price: number;
   available: boolean;
   recipe: Array<{ ingredientId: string; name: string; quantity: string }>;
@@ -101,6 +104,7 @@ export interface OrderRecord {
 export interface BillRecord {
   billId: string;
   orderId: string;
+  orderIds?: string[];
   tableId: string | null;
   status: BillStatus;
   items: Array<{ itemId: string; itemName: string; quantity: number; unitPrice: number }>;
@@ -109,11 +113,40 @@ export interface BillRecord {
   total: number;
 }
 
+export interface MenuOrderValidationIssue {
+  itemId: string;
+  itemName: string;
+  requestedQuantity: number;
+  maxServableQuantity: number;
+  shortageIngredients: string[];
+  message: string;
+}
+
+export interface MenuOrderValidationResponse {
+  valid: boolean;
+  issues: MenuOrderValidationIssue[];
+}
+
 export interface KitchenTicket {
   ticketId: string;
   orderId: string;
   propertyId: string;
   cookId: string;
+  status: KitchenStatus;
+  updatedAt: string;
+}
+
+export interface KitchenTicketDetail {
+  ticketId: string;
+  orderId: string;
+  tableId: string | null;
+  tableName: string;
+  tableNumber: string;
+  waiterId: string | null;
+  waiterName: string;
+  cookId: string;
+  cookName: string;
+  items: OrderLine[];
   status: KitchenStatus;
   updatedAt: string;
 }
@@ -343,6 +376,8 @@ export interface MenuSettingsItem {
   menuItemId: string;
   itemCode: string;
   itemName: string;
+  categoryId: string | null;
+  categoryName: string | null;
   description: string;
   price: number;
   recipeCount: number;
@@ -441,6 +476,7 @@ export interface TableStatusChangePayload {
 export interface MenuSettingPayload {
   itemCode: string;
   itemName: string;
+  categoryName: string;
   description: string;
   price: number;
   vegetarian: boolean;
@@ -552,6 +588,7 @@ export interface PosSnapshot {
   areaSections: AreaSectionSettingRecord[];
   menu: MenuItem[];
   availability: MenuAvailability[];
+  tickets: KitchenTicket[];
   orders: OrderRecord[];
   bills: BillRecord[];
   dailyInsight: DailyInsight;
@@ -559,8 +596,24 @@ export interface PosSnapshot {
 
 export interface KitchenSnapshot {
   tickets: KitchenTicket[];
+  orders: OrderRecord[];
+  tables: TableRecord[];
+  employees: EmployeeRecord[];
   stock: StockItem[];
   dailyInsight: DailyInsight;
+}
+
+export interface PickupQueueItem {
+  ticketId: string;
+  orderId: string;
+  tableId: string | null;
+  tableName: string;
+  tableNumber: string;
+  waiterId: string | null;
+  waiterName: string;
+  items: OrderLine[];
+  status: KitchenStatus;
+  updatedAt: string;
 }
 
 export function getRuntimeScope(): RuntimeScope {
@@ -588,6 +641,65 @@ export function getRuntimeScope(): RuntimeScope {
   } catch {
     return { productSlug: PRODUCT_SLUG, tenantId: DEFAULT_TENANT_ID, propertyId: DEFAULT_PROPERTY_ID };
   }
+}
+
+export function buildKitchenTicketDetails(
+  tickets: KitchenTicket[],
+  orders: OrderRecord[],
+  tables: TableRecord[],
+  employees: EmployeeRecord[]
+): KitchenTicketDetail[] {
+  const orderById = new Map(orders.map((order) => [order.orderId, order]));
+  const tableById = new Map(tables.map((table) => [table.tableId, table]));
+  const employeeNameById = new Map(employees.map((employee) => [employee.employeeId, employee.name]));
+
+  return tickets
+    .map((ticket) => {
+      const order = orderById.get(ticket.orderId);
+      const table = order?.tableId ? tableById.get(order.tableId) ?? null : null;
+      const waiterId = order?.waiterId ?? table?.waiterId ?? null;
+      return {
+        ticketId: ticket.ticketId,
+        orderId: ticket.orderId,
+        tableId: order?.tableId ?? table?.tableId ?? null,
+        tableName: table?.displayName ?? order?.tableId ?? "Walk-in order",
+        tableNumber: table?.tableNumber ?? order?.tableId ?? "Table pending",
+        waiterId,
+        waiterName: waiterId ? employeeNameById.get(waiterId) ?? waiterId : "Server pending",
+        cookId: ticket.cookId,
+        cookName:
+          ticket.cookId && ticket.cookId !== "cook-pending"
+            ? employeeNameById.get(ticket.cookId) ?? ticket.cookId
+            : "Chef pending",
+        items: order?.items ?? [],
+        status: ticket.status,
+        updatedAt: ticket.updatedAt
+      } satisfies KitchenTicketDetail;
+    })
+    .sort((left, right) => new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime());
+}
+
+export function buildPickupQueue(
+  tickets: KitchenTicket[],
+  orders: OrderRecord[],
+  tables: TableRecord[],
+  employees: EmployeeRecord[]
+): PickupQueueItem[] {
+  return buildKitchenTicketDetails(tickets, orders, tables, employees)
+    .filter((ticket) => ticket.status === "READY")
+    .map((ticket) => ({
+      ticketId: ticket.ticketId,
+      orderId: ticket.orderId,
+      tableId: ticket.tableId,
+      tableName: ticket.tableName,
+      tableNumber: ticket.tableNumber,
+      waiterId: ticket.waiterId,
+      waiterName: ticket.waiterName,
+      items: ticket.items,
+      status: ticket.status,
+      updatedAt: ticket.updatedAt
+    }))
+    .sort((left, right) => new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime());
 }
 
 export function saveRuntimeScope(scope: RuntimeScope) {
@@ -783,18 +895,19 @@ function propertyApiUrl(service: string, path: string, scope: RuntimeScope = get
 }
 
 export async function loadPosSnapshot(): Promise<PosSnapshot> {
-  const [employees, tables, areaSections, menu, availability, orders, bills, dailyInsight] = await Promise.all([
+  const [employees, tables, areaSections, menu, availability, tickets, orders, bills, dailyInsight] = await Promise.all([
     fetchJson<EmployeeRecord[]>(propertyApiUrl("employee", "/api/employees"), []),
     fetchJson<TableRecord[]>(propertyApiUrl("table", "/api/tables"), []),
     fetchJson<AreaSectionSettingsSummary>(propertyApiUrl("property", "/api/settings/areas-sections"), { editableFields: [], records: [] }),
     fetchJson<MenuItem[]>(propertyApiUrl("catalog", "/api/menu/items"), []),
     fetchJson<MenuAvailability[]>(propertyApiUrl("inventory", "/api/inventory/availability/menu-items"), []),
+    fetchJson<KitchenTicket[]>(propertyApiUrl("kitchen", "/api/kitchen/tickets"), []),
     fetchJson<OrderRecord[]>(propertyApiUrl("order", "/api/orders"), []),
     fetchJson<BillRecord[]>(propertyApiUrl("billing", "/api/bills"), []),
     fetchJson<DailyInsight>(propertyApiUrl("insights", "/api/insights/daily"), fallbackInsight)
   ]);
 
-  return { employees, tables, areaSections: areaSections.records, menu, availability, orders, bills, dailyInsight };
+  return { employees, tables, areaSections: areaSections.records, menu, availability, tickets, orders, bills, dailyInsight };
 }
 
 export async function assignTableToWaiter(args: {
@@ -819,13 +932,16 @@ export async function updateTableStatus(tableId: string, payload: TableStatusCha
 }
 
 export async function loadKitchenSnapshot(): Promise<KitchenSnapshot> {
-  const [tickets, stock, dailyInsight] = await Promise.all([
+  const [tickets, orders, tables, employees, stock, dailyInsight] = await Promise.all([
     fetchJson<KitchenTicket[]>(propertyApiUrl("kitchen", "/api/kitchen/tickets"), []),
+    fetchJson<OrderRecord[]>(propertyApiUrl("order", "/api/orders"), []),
+    fetchJson<TableRecord[]>(propertyApiUrl("table", "/api/tables"), []),
+    fetchJson<EmployeeRecord[]>(propertyApiUrl("employee", "/api/employees"), []),
     fetchJson<StockItem[]>(propertyApiUrl("inventory", "/api/inventory/stock"), []),
     fetchJson<DailyInsight>(propertyApiUrl("insights", "/api/insights/daily"), fallbackInsight)
   ]);
 
-  return { tickets, stock, dailyInsight };
+  return { tickets, orders, tables, employees, stock, dailyInsight };
 }
 
 export async function createDineInOrder(args: {
@@ -850,6 +966,20 @@ export async function createDineInOrder(args: {
   });
 
   return order;
+}
+
+export async function validateDineInOrder(items: OrderLine[]) {
+  return fetchJson<MenuOrderValidationResponse>(propertyApiUrl("inventory", "/api/inventory/availability/menu-items/validate-order"), undefined, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      items: items.map((item) => ({
+        itemId: item.itemId,
+        itemName: item.itemName,
+        quantity: item.quantity
+      }))
+    })
+  });
 }
 
 export async function loginWithCredentials(username: string, password: string) {
@@ -1150,26 +1280,48 @@ export async function finalizeBill(billId: string) {
   return fetchJson<BillRecord>(propertyApiUrl("billing", `/api/bills/${billId}/finalize`), undefined, { method: "POST" });
 }
 
-export async function processBillPayment(bill: BillRecord) {
+export async function processBillPayment(bill: BillRecord, method: PaymentMethod) {
   return fetchJson(propertyApiUrl("payment", "/api/payments"), undefined, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       billId: bill.billId,
-      method: "UPI",
+      method,
       amount: bill.total
     })
   });
 }
 
-export async function acceptKitchenTicket(ticketId: string) {
+export async function acceptKitchenTicket(ticketId: string, cookId?: string | null) {
   return fetchJson<KitchenTicket>(propertyApiUrl("kitchen", `/api/kitchen/tickets/${ticketId}/accept`), undefined, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cookId: cookId ?? null })
+  });
+}
+
+export async function readyKitchenTicket(ticketId: string, cookId?: string | null) {
+  return fetchJson<KitchenTicket>(propertyApiUrl("kitchen", `/api/kitchen/tickets/${ticketId}/ready`), undefined, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cookId: cookId ?? null })
+  });
+}
+
+export async function serveKitchenTicket(ticketId: string) {
+  return fetchJson<KitchenTicket>(propertyApiUrl("kitchen", `/api/kitchen/tickets/${ticketId}/served`), undefined, {
     method: "PATCH"
   });
 }
 
-export async function readyKitchenTicket(ticketId: string) {
-  return fetchJson<KitchenTicket>(propertyApiUrl("kitchen", `/api/kitchen/tickets/${ticketId}/ready`), undefined, {
+export async function markOrderReadyToServe(orderId: string) {
+  return fetchJson<OrderRecord>(propertyApiUrl("order", `/api/orders/${orderId}/ready-to-serve`), undefined, {
+    method: "PATCH"
+  });
+}
+
+export async function markOrderServed(orderId: string) {
+  return fetchJson<OrderRecord>(propertyApiUrl("order", `/api/orders/${orderId}/served`), undefined, {
     method: "PATCH"
   });
 }

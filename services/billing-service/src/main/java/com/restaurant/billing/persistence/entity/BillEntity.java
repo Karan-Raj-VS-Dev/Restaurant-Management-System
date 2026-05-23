@@ -3,6 +3,8 @@ package com.restaurant.billing.persistence.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -17,6 +19,9 @@ public class BillEntity {
 
     @Column(name = "order_id", nullable = false, length = 64)
     private String orderId;
+
+    @Column(name = "linked_order_ids", nullable = false)
+    private String linkedOrderIds;
 
     @Column(name = "tenant_id", nullable = false, length = 64)
     private String tenantId;
@@ -54,6 +59,144 @@ public class BillEntity {
     @Column(name = "closed_at")
     private Instant closedAt;
 
-    protected BillEntity() {
+    public BillEntity() {
+    }
+
+    @PrePersist
+    void onCreate() {
+        Instant now = Instant.now();
+        if (generatedAt == null) {
+            generatedAt = now;
+        }
+        if (linkedOrderIds == null) {
+            linkedOrderIds = orderId == null ? "" : orderId;
+        }
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        if (linkedOrderIds == null) {
+            linkedOrderIds = orderId == null ? "" : orderId;
+        }
+    }
+
+    public String getBillId() {
+        return billId;
+    }
+
+    public void setBillId(String billId) {
+        this.billId = billId;
+    }
+
+    public String getOrderId() {
+        return orderId;
+    }
+
+    public void setOrderId(String orderId) {
+        this.orderId = orderId;
+    }
+
+    public String getLinkedOrderIds() {
+        return linkedOrderIds;
+    }
+
+    public void setLinkedOrderIds(String linkedOrderIds) {
+        this.linkedOrderIds = linkedOrderIds;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
+
+    public String getPropertyId() {
+        return propertyId;
+    }
+
+    public void setPropertyId(String propertyId) {
+        this.propertyId = propertyId;
+    }
+
+    public String getTableId() {
+        return tableId;
+    }
+
+    public void setTableId(String tableId) {
+        this.tableId = tableId;
+    }
+
+    public String getCustomerId() {
+        return customerId;
+    }
+
+    public void setCustomerId(String customerId) {
+        this.customerId = customerId;
+    }
+
+    public String getBillingStatus() {
+        return billingStatus;
+    }
+
+    public void setBillingStatus(String billingStatus) {
+        this.billingStatus = billingStatus;
+    }
+
+    public BigDecimal getSubtotalAmount() {
+        return subtotalAmount;
+    }
+
+    public void setSubtotalAmount(BigDecimal subtotalAmount) {
+        this.subtotalAmount = subtotalAmount;
+    }
+
+    public BigDecimal getTaxAmount() {
+        return taxAmount;
+    }
+
+    public void setTaxAmount(BigDecimal taxAmount) {
+        this.taxAmount = taxAmount;
+    }
+
+    public BigDecimal getServiceChargeAmount() {
+        return serviceChargeAmount;
+    }
+
+    public void setServiceChargeAmount(BigDecimal serviceChargeAmount) {
+        this.serviceChargeAmount = serviceChargeAmount;
+    }
+
+    public BigDecimal getDiscountAmount() {
+        return discountAmount;
+    }
+
+    public void setDiscountAmount(BigDecimal discountAmount) {
+        this.discountAmount = discountAmount;
+    }
+
+    public BigDecimal getTotalAmount() {
+        return totalAmount;
+    }
+
+    public void setTotalAmount(BigDecimal totalAmount) {
+        this.totalAmount = totalAmount;
+    }
+
+    public Instant getGeneratedAt() {
+        return generatedAt;
+    }
+
+    public void setGeneratedAt(Instant generatedAt) {
+        this.generatedAt = generatedAt;
+    }
+
+    public Instant getClosedAt() {
+        return closedAt;
+    }
+
+    public void setClosedAt(Instant closedAt) {
+        this.closedAt = closedAt;
     }
 }

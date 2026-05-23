@@ -1,9 +1,11 @@
 package com.restaurant.catalog;
 
 import com.restaurant.catalog.persistence.entity.IngredientEntity;
+import com.restaurant.catalog.persistence.entity.MenuCategoryEntity;
 import com.restaurant.catalog.persistence.entity.MenuItemEntity;
 import com.restaurant.catalog.persistence.entity.RecipeIngredientEntity;
 import com.restaurant.catalog.persistence.repository.IngredientRepository;
+import com.restaurant.catalog.persistence.repository.MenuCategoryRepository;
 import com.restaurant.catalog.persistence.repository.MenuItemRepository;
 import com.restaurant.catalog.persistence.repository.RecipeIngredientRepository;
 import java.math.BigDecimal;
@@ -25,37 +27,51 @@ import org.springframework.web.server.ResponseStatusException;
 public class CatalogService {
 
     private final MenuItemRepository menuItemRepository;
+    private final MenuCategoryRepository menuCategoryRepository;
     private final IngredientRepository ingredientRepository;
     private final RecipeIngredientRepository recipeIngredientRepository;
 
     public CatalogService(MenuItemRepository menuItemRepository,
+                          MenuCategoryRepository menuCategoryRepository,
                           IngredientRepository ingredientRepository,
                           RecipeIngredientRepository recipeIngredientRepository) {
         this.menuItemRepository = menuItemRepository;
+        this.menuCategoryRepository = menuCategoryRepository;
         this.ingredientRepository = ingredientRepository;
         this.recipeIngredientRepository = recipeIngredientRepository;
     }
 
     public List<MenuItemResponse> listMenuItems(String tenantId, String propertyId) {
         List<MenuItemEntity> items = menuItemRepository.findByTenantIdAndPropertyIdAndActiveTrueOrderByItemNameAsc(tenantId, propertyId);
+        Map<String, MenuCategoryEntity> categoryById = menuCategoryRepository
+                .findByTenantIdAndPropertyIdAndActiveTrueOrderByDisplayOrderAscCategoryNameAsc(tenantId, propertyId).stream()
+                .collect(Collectors.toMap(MenuCategoryEntity::getCategoryId, Function.identity()));
         Map<String, List<RecipeIngredient>> recipeByItemId = buildRecipeByMenuItem(tenantId, propertyId, items.stream()
                 .map(MenuItemEntity::getMenuItemId)
                 .toList());
 
         return items.stream()
-                .map(item -> new MenuItemResponse(
-                        item.getMenuItemId(),
-                        propertyId,
-                        item.getItemName(),
-                        item.getPrice(),
-                        item.isActive(),
-                        recipeByItemId.getOrDefault(item.getMenuItemId(), List.of())
-                ))
+                .map(item -> {
+                    MenuCategoryEntity category = item.getCategoryId() == null ? null : categoryById.get(item.getCategoryId());
+                    return new MenuItemResponse(
+                            item.getMenuItemId(),
+                            propertyId,
+                            item.getItemName(),
+                            item.getCategoryId(),
+                            category == null ? null : category.getCategoryName(),
+                            item.getPrice(),
+                            item.isActive(),
+                            recipeByItemId.getOrDefault(item.getMenuItemId(), List.of())
+                    );
+                })
                 .toList();
     }
 
     public MenuSettingsSummaryResponse getSettingsSummary(String tenantId, String propertyId) {
         List<MenuItemEntity> items = menuItemRepository.findByTenantIdAndPropertyIdOrderByItemNameAsc(tenantId, propertyId);
+        Map<String, MenuCategoryEntity> categoryById = menuCategoryRepository
+                .findByTenantIdAndPropertyIdAndActiveTrueOrderByDisplayOrderAscCategoryNameAsc(tenantId, propertyId).stream()
+                .collect(Collectors.toMap(MenuCategoryEntity::getCategoryId, Function.identity()));
         Map<String, List<RecipeIngredient>> recipeByItemId = buildRecipeByMenuItem(tenantId, propertyId, items.stream()
                 .map(MenuItemEntity::getMenuItemId)
                 .toList());
@@ -69,6 +85,8 @@ public class CatalogService {
                                 item.getMenuItemId(),
                                 item.getItemCode(),
                                 item.getItemName(),
+                                item.getCategoryId(),
+                                item.getCategoryId() == null ? null : categoryById.get(item.getCategoryId()) == null ? null : categoryById.get(item.getCategoryId()).getCategoryName(),
                                 item.getDescription(),
                                 item.getPrice(),
                                 recipeByItemId.getOrDefault(item.getMenuItemId(), List.of()).size(),
@@ -86,8 +104,7 @@ public class CatalogService {
         entity.setMenuItemId("item-" + randomId());
         entity.setTenantId(tenantId);
         entity.setPropertyId(propertyId);
-        entity.setCategoryId(null);
-        applyMenuValues(entity, request);
+        applyMenuValues(entity, tenantId, propertyId, request);
         MenuItemEntity saved = menuItemRepository.save(entity);
         saveRecipe(tenantId, propertyId, saved.getMenuItemId(), request.recipe());
         return buildSettingsResponse(tenantId, propertyId, saved);
@@ -97,16 +114,17 @@ public class CatalogService {
         MenuItemEntity entity = menuItemRepository.findByTenantIdAndPropertyIdAndMenuItemId(tenantId, propertyId, menuItemId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Dish was not found"));
 
-        applyMenuValues(entity, request);
+        applyMenuValues(entity, tenantId, propertyId, request);
         MenuItemEntity saved = menuItemRepository.save(entity);
         recipeIngredientRepository.deleteByMenuItemId(saved.getMenuItemId());
         saveRecipe(tenantId, propertyId, saved.getMenuItemId(), request.recipe());
         return buildSettingsResponse(tenantId, propertyId, saved);
     }
 
-    private void applyMenuValues(MenuItemEntity entity, MenuSettingsItemRequest request) {
+    private void applyMenuValues(MenuItemEntity entity, String tenantId, String propertyId, MenuSettingsItemRequest request) {
         entity.setItemCode(normalizeCode(request.itemCode()));
         entity.setItemName(requireValue(request.itemName(), "Dish name"));
+        entity.setCategoryId(resolveCategoryId(tenantId, propertyId, request.categoryName()));
         entity.setDescription(blankToNull(request.description()));
         entity.setPrice(normalizeMoney(request.price()));
         entity.setVegetarian(request.vegetarian());
@@ -139,12 +157,17 @@ public class CatalogService {
     }
 
     private MenuSettingsItemResponse buildSettingsResponse(String tenantId, String propertyId, MenuItemEntity entity) {
+        MenuCategoryEntity category = entity.getCategoryId() == null
+                ? null
+                : menuCategoryRepository.findById(entity.getCategoryId()).orElse(null);
         List<RecipeIngredient> recipe = buildRecipeByMenuItem(tenantId, propertyId, List.of(entity.getMenuItemId()))
                 .getOrDefault(entity.getMenuItemId(), List.of());
         return new MenuSettingsItemResponse(
                 entity.getMenuItemId(),
                 entity.getItemCode(),
                 entity.getItemName(),
+                entity.getCategoryId(),
+                category == null ? null : category.getCategoryName(),
                 entity.getDescription(),
                 entity.getPrice(),
                 recipe.size(),
@@ -231,6 +254,27 @@ public class CatalogService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, fieldName + " is required");
         }
         return value.trim();
+    }
+
+    private String resolveCategoryId(String tenantId, String propertyId, String categoryName) {
+        String normalizedCategoryName = blankToNull(categoryName);
+        if (normalizedCategoryName == null) {
+            return null;
+        }
+
+        return menuCategoryRepository.findByTenantIdAndPropertyIdAndCategoryNameIgnoreCase(tenantId, propertyId, normalizedCategoryName)
+                .map(MenuCategoryEntity::getCategoryId)
+                .orElseGet(() -> {
+                    MenuCategoryEntity category = MenuCategoryEntity.create(
+                            "cat-" + randomId(),
+                            tenantId,
+                            propertyId,
+                            normalizedCategoryName,
+                            0,
+                            true
+                    );
+                    return menuCategoryRepository.save(category).getCategoryId();
+                });
     }
 
     private String blankToNull(String value) {

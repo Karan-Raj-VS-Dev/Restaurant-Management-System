@@ -24,6 +24,12 @@
   gap: 18px;
 }
 
+.kitchen-right-column {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
 .kitchen-lanes-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -69,6 +75,15 @@
   background: rgba(255, 255, 255, 0.84);
 }
 
+.kitchen-ticket-urgent,
+.kitchen-ticket-overdue {
+  border: 1px solid rgba(164, 74, 33, 0.22);
+}
+
+.kitchen-ticket-overdue {
+  background: rgba(164, 74, 33, 0.12);
+}
+
 .kitchen-ticket p {
   margin: 4px 0 0;
   color: var(--rm-muted);
@@ -78,6 +93,125 @@
   color: var(--rm-muted);
   font-size: 0.88rem;
   margin: 10px 0;
+}
+
+.kitchen-chef-select {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.kitchen-chef-select span {
+  font-size: 0.86rem;
+  color: var(--rm-muted);
+  font-weight: 600;
+}
+
+.kitchen-chef-select select {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(19, 32, 38, 0.1);
+  padding: 0.8rem 0.9rem;
+  background: rgba(255, 255, 255, 0.92);
+  font: inherit;
+}
+
+.kitchen-ticket-timer-block {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.kitchen-ticket-timer-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  font-size: 0.88rem;
+}
+
+.kitchen-ticket-timer-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(19, 32, 38, 0.08);
+  overflow: hidden;
+}
+
+.kitchen-ticket-timer-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s linear;
+}
+
+.kitchen-ticket-timer-fill-steady {
+  background: linear-gradient(90deg, #16576d, #28a4b1);
+}
+
+.kitchen-ticket-timer-fill-urgent,
+.kitchen-ticket-timer-fill-overdue {
+  background: linear-gradient(90deg, #a03d3d, #d86144);
+}
+
+.kitchen-pickup-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.kitchen-pickup-card {
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.kitchen-pickup-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.kitchen-pickup-head h3,
+.kitchen-pickup-head p,
+.kitchen-pickup-items {
+  margin: 0;
+}
+
+.kitchen-pickup-head p,
+.kitchen-pickup-items {
+  color: var(--rm-muted);
+}
+
+.kitchen-pickup-card-completed {
+  background: rgba(243, 247, 248, 0.86);
+}
+
+.kitchen-pickup-timestamp {
+  margin: 10px 0 0;
+  color: var(--rm-muted);
+}
+
+.kitchen-pickup-timestamp {
+  font-size: 0.9rem;
+}
+
+.kitchen-ticket-items,
+.kitchen-pickup-items {
+  margin: 10px 0 0;
+  padding-left: 1.2rem;
+  color: var(--rm-muted);
+}
+
+.kitchen-ticket-items li,
+.kitchen-pickup-items li {
+  margin: 0.2rem 0;
+}
+
+.kitchen-pickup-chef {
+  margin: 10px 0 0;
+  color: var(--rm-muted);
+  font-size: 0.92rem;
 }
 
 .kitchen-stock-layout {

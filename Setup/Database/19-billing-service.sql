@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS bills (
     bill_id VARCHAR(64) PRIMARY KEY,
     order_id VARCHAR(64) NOT NULL UNIQUE,
+    linked_order_ids TEXT NOT NULL DEFAULT '',
     tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom',
     property_id VARCHAR(64) NOT NULL,
     table_id VARCHAR(64),
@@ -16,6 +17,7 @@ CREATE TABLE IF NOT EXISTS bills (
 );
 
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom';
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS linked_order_ids TEXT NOT NULL DEFAULT '';
 
 UPDATE bills
 SET tenant_id = 'bikini-bottom'

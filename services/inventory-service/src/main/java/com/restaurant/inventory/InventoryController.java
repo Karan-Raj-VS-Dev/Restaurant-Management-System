@@ -51,6 +51,21 @@ public class InventoryController {
         );
     }
 
+    @PostMapping("/availability/menu-items/validate-order")
+    public MenuOrderValidationResponse validateMenuOrder(
+            @PathVariable(name = "tenantId", required = false) String scopedTenantId,
+            @PathVariable(name = "propertyId", required = false) String scopedPropertyId,
+            @RequestParam(name = "tenantId", required = false) String tenantId,
+            @RequestParam(name = "propertyId", required = false) String propertyId,
+            @Valid @RequestBody ValidateMenuOrderRequest request
+    ) {
+        return inventoryService.validateMenuOrder(
+                resolveTenantId(scopedTenantId, tenantId),
+                resolvePropertyId(scopedPropertyId, propertyId),
+                request
+        );
+    }
+
     @GetMapping("/settings/inventory")
     public InventorySettingsSummaryResponse getSettingsSummary(
             @PathVariable(name = "tenantId", required = false) String scopedTenantId,

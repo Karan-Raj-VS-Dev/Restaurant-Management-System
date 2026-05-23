@@ -6,6 +6,8 @@ import com.restaurant.platform.eventing.EventEnvelopeFactory;
 import com.restaurant.platform.eventing.EventKeys;
 import com.restaurant.platform.eventing.contract.TableAssignedEvent;
 import com.restaurant.platform.eventing.contract.TableStatusChangedEvent;
+import com.restaurant.table.persistence.entity.RestaurantTableEntity;
+import com.restaurant.table.persistence.repository.RestaurantTableRepository;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -24,29 +26,30 @@ public class TableService {
     private static final Duration CLEANER_READY_DELAY = Duration.ofSeconds(300);
 
     private final Map<String, TableConfiguration> tables = new ConcurrentHashMap<>();
+    private final RestaurantTableRepository restaurantTableRepository;
     private final EventEnvelopeFactory eventEnvelopeFactory;
     private final DomainEventPublisher domainEventPublisher;
 
-    public TableService(EventEnvelopeFactory eventEnvelopeFactory,
+    public TableService(RestaurantTableRepository restaurantTableRepository,
+                        EventEnvelopeFactory eventEnvelopeFactory,
                         DomainEventPublisher domainEventPublisher) {
+        this.restaurantTableRepository = restaurantTableRepository;
         this.eventEnvelopeFactory = eventEnvelopeFactory;
         this.domainEventPublisher = domainEventPublisher;
         seed();
     }
 
     public List<TableResponse> listTables(String tenantId, String propertyId) {
-        return tables.entrySet().stream()
-                .filter(entry -> entry.getKey().startsWith(scopePrefix(tenantId, propertyId)))
-                .map(entry -> syncDueTransition(tenantId, propertyId, entry.getValue()))
+        return loadScopedConfigurations(tenantId, propertyId).stream()
+                .map(configuration -> syncDueTransition(tenantId, propertyId, configuration))
                 .filter(TableConfiguration::active)
                 .map(this::toTableResponse)
                 .toList();
     }
 
     public TableSettingsSummaryResponse getSettingsSummary(String tenantId, String propertyId) {
-        List<TableSettingRecordResponse> scopedTables = tables.entrySet().stream()
-                .filter(entry -> entry.getKey().startsWith(scopePrefix(tenantId, propertyId)))
-                .map(entry -> syncDueTransition(tenantId, propertyId, entry.getValue()))
+        List<TableSettingRecordResponse> scopedTables = loadScopedConfigurations(tenantId, propertyId).stream()
+                .map(configuration -> syncDueTransition(tenantId, propertyId, configuration))
                 .map(this::toTableSettingRecord)
                 .toList();
         return new TableSettingsSummaryResponse(
@@ -77,6 +80,7 @@ public class TableService {
                 request.active()
         );
         tables.put(key(tenantId, propertyId, tableId), configuration);
+        persistTableConfiguration(tenantId, configuration);
         return toTableSettingRecord(configuration);
     }
 
@@ -102,6 +106,7 @@ public class TableService {
         ));
         TableConfiguration updated = applySettingsUpdate(current, propertyId, request);
         tables.put(scopedKey, updated);
+        persistTableConfiguration(tenantId, updated);
         return toTableSettingRecord(updated);
     }
 
@@ -125,24 +130,7 @@ public class TableService {
 
     public TableResponse updateStatus(String tenantId, String tableId, String propertyId, UpdateTableStatusRequest request) {
         String scopedKey = key(tenantId, propertyId, tableId);
-        TableConfiguration current = syncDueTransition(tenantId, propertyId, tables.getOrDefault(scopedKey, new TableConfiguration(
-                tableId,
-                propertyId,
-                tableId,
-                tableId,
-                "Main floor",
-                "Dining",
-                4,
-                TableStatus.AVAILABLE,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                true
-        )));
+        TableConfiguration current = syncDueTransition(tenantId, propertyId, getConfiguration(tenantId, propertyId, tableId));
 
         TableStatus targetStatus = parseStatus(request.targetStatus());
         TableConfiguration updated = switch (targetStatus) {
@@ -154,6 +142,7 @@ public class TableService {
         };
 
         tables.put(scopedKey, updated);
+        persistTableConfiguration(tenantId, updated);
 
         if (updated.status() == TableStatus.OCCUPIED) {
             publishAssignment(tenantId, toTableResponse(updated));
@@ -223,6 +212,9 @@ public class TableService {
     private TableConfiguration occupyTable(TableConfiguration current, UpdateTableStatusRequest request) {
         if (current.status() == TableStatus.UNAVAILABLE) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This table is marked unavailable in property settings.");
+        }
+        if (current.status() == TableStatus.OCCUPIED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This table is already occupied.");
         }
         int partySize = Objects.requireNonNullElse(request.partySize(), 0);
         if (partySize <= 0) {
@@ -304,6 +296,9 @@ public class TableService {
     }
 
     private TableConfiguration markNeedsCleaning(TableConfiguration current, UpdateTableStatusRequest request) {
+        if (!Boolean.TRUE.equals(request.immediate()) && current.pendingStatus() == TableStatus.NEEDS_CLEANING) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This table is already queued to move into cleaning.");
+        }
         if (Boolean.TRUE.equals(request.immediate())) {
             return new TableConfiguration(
                     current.tableId(),
@@ -349,6 +344,9 @@ public class TableService {
         boolean cleanerRequired = current.status() == TableStatus.NEEDS_CLEANING || current.pendingStatus() == TableStatus.AVAILABLE;
         if (cleanerRequired && (request.cleanerId() == null || request.cleanerId().isBlank())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a cleaner before returning the table to available.");
+        }
+        if (cleanerRequired && !Boolean.TRUE.equals(request.immediate()) && current.pendingStatus() == TableStatus.AVAILABLE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A cleaner cycle is already running for this table.");
         }
 
         if (cleanerRequired && !Boolean.TRUE.equals(request.immediate())) {
@@ -460,6 +458,99 @@ public class TableService {
         return updated;
     }
 
+    private List<TableConfiguration> loadScopedConfigurations(String tenantId, String propertyId) {
+        return restaurantTableRepository.findByTenantIdAndPropertyIdAndActiveTrue(tenantId, propertyId).stream()
+                .map(entity -> mergeWithRuntime(tenantId, propertyId, entity))
+                .toList();
+    }
+
+    private TableConfiguration getConfiguration(String tenantId, String propertyId, String tableId) {
+        TableConfiguration runtime = tables.get(key(tenantId, propertyId, tableId));
+        if (runtime != null) {
+            return runtime;
+        }
+        return restaurantTableRepository.findByTenantIdAndPropertyIdAndTableId(tenantId, propertyId, tableId)
+                .map(entity -> mergeWithRuntime(tenantId, propertyId, entity))
+                .orElse(new TableConfiguration(
+                        tableId,
+                        propertyId,
+                        tableId,
+                        tableId,
+                        "Main floor",
+                        "Dining",
+                        4,
+                        TableStatus.AVAILABLE,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        true
+                ));
+    }
+
+    private TableConfiguration mergeWithRuntime(String tenantId, String propertyId, RestaurantTableEntity entity) {
+        TableConfiguration runtime = tables.get(key(tenantId, propertyId, entity.getTableId()));
+        TableStatus persistedStatus = parseStatus(entity.getStatus());
+        if (runtime == null) {
+            return new TableConfiguration(
+                    entity.getTableId(),
+                    entity.getPropertyId(),
+                    entity.getTableNumber(),
+                    entity.getDisplayName() == null || entity.getDisplayName().isBlank() ? entity.getTableNumber() : entity.getDisplayName(),
+                    entity.getFloorName(),
+                    entity.getSectionName(),
+                    entity.getCapacity(),
+                    persistedStatus,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    entity.isActive()
+            );
+        }
+        return new TableConfiguration(
+                entity.getTableId(),
+                entity.getPropertyId(),
+                entity.getTableNumber(),
+                entity.getDisplayName() == null || entity.getDisplayName().isBlank() ? runtime.displayName() : entity.getDisplayName(),
+                entity.getFloorName(),
+                entity.getSectionName(),
+                entity.getCapacity(),
+                runtime.status(),
+                runtime.waiterId(),
+                runtime.cleanerId(),
+                runtime.currentPartySize(),
+                runtime.reservationPartySize(),
+                runtime.reservationTime(),
+                runtime.pendingStatus(),
+                runtime.pendingStatusAt(),
+                entity.isActive()
+        );
+    }
+
+    private void persistTableConfiguration(String tenantId, TableConfiguration configuration) {
+        RestaurantTableEntity entity = restaurantTableRepository
+                .findByTenantIdAndPropertyIdAndTableId(tenantId, configuration.propertyId(), configuration.tableId())
+                .orElseGet(RestaurantTableEntity::new);
+        entity.setTableId(configuration.tableId());
+        entity.setTenantId(tenantId);
+        entity.setPropertyId(configuration.propertyId());
+        entity.setTableNumber(configuration.tableNumber());
+        entity.setDisplayName(configuration.displayName());
+        entity.setFloorName(configuration.floorName());
+        entity.setSectionName(configuration.sectionName());
+        entity.setCapacity(configuration.capacity());
+        entity.setStatus(configuration.status().name());
+        entity.setActive(configuration.active());
+        restaurantTableRepository.save(entity);
+    }
+
     private TableConfiguration syncDueTransition(String tenantId, String propertyId, TableConfiguration current) {
         if (current.pendingStatus() == null || current.pendingStatusAt() == null || current.pendingStatusAt().isAfter(Instant.now())) {
             return current;
@@ -506,6 +597,7 @@ public class TableService {
         };
 
         tables.put(key(tenantId, propertyId, current.tableId()), updated);
+        persistTableConfiguration(tenantId, updated);
         if (updated.status() != current.status()) {
             publishStatusChange(tenantId, toTableResponse(updated));
         }
@@ -565,9 +657,12 @@ public class TableService {
     }
 
     private void seed() {
-        tables.put(key("bikini-bottom", "krusty-krab", "table-01"), new TableConfiguration("table-01", "krusty-krab", "T-01", "Window 01", "Main floor", "Dining", 4, TableStatus.AVAILABLE, null, null, null, null, null, null, null, true));
-        tables.put(key("bikini-bottom", "krusty-krab", "table-02"), new TableConfiguration("table-02", "krusty-krab", "T-02", "Window 02", "Main floor", "Dining", 4, TableStatus.OCCUPIED, "emp-101", null, 4, null, null, null, null, true));
-        tables.put(key("bikini-bottom", "krusty-krab", "table-03"), new TableConfiguration("table-03", "krusty-krab", "T-03", "Corner 03", "Main floor", "Patio", 2, TableStatus.NEEDS_CLEANING, null, null, null, null, null, null, null, true));
+        if (!restaurantTableRepository.findByTenantIdAndPropertyIdAndActiveTrue("bikini-bottom", "krusty-krab").isEmpty()) {
+            return;
+        }
+        persistTableConfiguration("bikini-bottom", new TableConfiguration("table-01", "krusty-krab", "T-01", "Window 01", "Main floor", "Dining", 4, TableStatus.AVAILABLE, null, null, null, null, null, null, null, true));
+        persistTableConfiguration("bikini-bottom", new TableConfiguration("table-02", "krusty-krab", "T-02", "Window 02", "Main floor", "Dining", 4, TableStatus.AVAILABLE, null, null, null, null, null, null, null, true));
+        persistTableConfiguration("bikini-bottom", new TableConfiguration("table-03", "krusty-krab", "T-03", "Corner 03", "Main floor", "Patio", 2, TableStatus.AVAILABLE, null, null, null, null, null, null, null, true));
     }
 
     private record TableConfiguration(

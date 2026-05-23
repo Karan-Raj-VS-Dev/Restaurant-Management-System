@@ -2,12 +2,17 @@ import {
   assignTableToWaiter,
   AreaSectionSettingRecord,
   BillRecord,
+  buildPickupQueue,
   buildAvailabilityMap,
   createDineInOrder,
   finalizeBill,
   isApiRequestError,
   loadPosSnapshot,
+  markOrderServed,
+  validateDineInOrder,
+  type PaymentMethod,
   processBillPayment,
+  serveKitchenTicket,
   type TableStatus,
   updateTableStatus,
   type AuthSession,
@@ -48,6 +53,10 @@ export default function App() {
 
 function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardContext: DashboardContext }) {
   const { data, loading, refreshing, error, lastUpdated, refresh } = usePollingResource(loadPosSnapshot, 5000);
+  const showTableStatusMessage = (message: string) => {
+    setTableStatusMessageFading(false);
+    setTableStatusMessage(message);
+  };
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedFloorName, setSelectedFloorName] = useState("");
   const [selectedSectionName, setSelectedSectionName] = useState("");
@@ -58,14 +67,29 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
   const [reservationTime, setReservationTime] = useState("");
   const [cart, setCart] = useState<OrderLine[]>([]);
   const [orderNote, setOrderNote] = useState<string | null>(null);
+  const [orderAlerts, setOrderAlerts] = useState<string[]>([]);
   const [tableStatusMessage, setTableStatusMessage] = useState<string | null>(null);
+  const [tableStatusMessageFading, setTableStatusMessageFading] = useState(false);
+  const [pendingTableBanner, setPendingTableBanner] = useState<{
+    tableId: string;
+    pendingStatus: "NEEDS_CLEANING" | "AVAILABLE";
+    actorName: string | null;
+  } | null>(null);
   const [reservationOverridePending, setReservationOverridePending] = useState(false);
   const [busyOrder, setBusyOrder] = useState(false);
   const [busyBillId, setBusyBillId] = useState<string | null>(null);
+  const [busyPickupTicketId, setBusyPickupTicketId] = useState<string | null>(null);
   const [busyTableStatus, setBusyTableStatus] = useState(false);
+  const [paymentBill, setPaymentBill] = useState<BillRecord | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("UPI");
+  const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
 
   const availability = buildAvailabilityMap(data?.availability ?? []);
   const menuById = new Map((data?.menu ?? []).map((item) => [item.itemId, item]));
+  const tableNameById = useMemo(
+    () => new Map((data?.tables ?? []).map((table) => [table.tableId, table.displayName || table.tableNumber || table.tableId])),
+    [data?.tables]
+  );
   const floorOptions = useMemo(
     () => Array.from(new Set((data?.tables ?? []).map((table) => table.floorName).filter((value): value is string => Boolean(value)))).sort((left, right) => left.localeCompare(right)),
     [data?.tables]
@@ -116,6 +140,12 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
     [data?.employees, selectedAreaSection, selectedTable?.cleanerId]
   );
   const selectedWaiter = availableWaiters.find((waiter) => waiter.employeeId === selectedWaiterId) ?? null;
+  const readyPickupQueue = useMemo(
+    () => buildPickupQueue(data?.tickets ?? [], data?.orders ?? [], data?.tables ?? [], data?.employees ?? []),
+    [data?.employees, data?.orders, data?.tables, data?.tickets]
+  );
+  const liveBills = useMemo(() => (data?.bills ?? []).filter((bill) => bill.status !== "PAID"), [data?.bills]);
+  const availableTableCount = useMemo(() => countReadyTables(data?.tables ?? []), [data?.tables]);
 
   useEffect(() => {
     if (!selectedFloorName && floorOptions.length > 0) {
@@ -167,14 +197,82 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
 
   useEffect(() => {
     if (!selectedTable) {
+      setPendingTableBanner(null);
       return;
     }
     setTableStatusMessage(null);
+    setTableStatusMessageFading(false);
+    setPendingTableBanner(null);
     setReservationOverridePending(false);
+  }, [selectedTable?.tableId]);
+
+  useEffect(() => {
+    if (!tableStatusMessage) {
+      setTableStatusMessageFading(false);
+      return;
+    }
+
+    setTableStatusMessageFading(false);
+    const fadeTimer = window.setTimeout(() => setTableStatusMessageFading(true), 4500);
+    const clearTimer = window.setTimeout(() => {
+      setTableStatusMessage(null);
+      setTableStatusMessageFading(false);
+    }, 5300);
+    return () => {
+      window.clearTimeout(fadeTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [tableStatusMessage]);
+
+  useEffect(() => {
+    if (!selectedTable) {
+      return;
+    }
     setPartySize(selectedTable.currentPartySize ?? 1);
     setReservationPartySize(selectedTable.reservationPartySize ?? 1);
     setReservationTime(selectedTable.reservationTime ? toDateTimeLocalInput(selectedTable.reservationTime) : "");
-  }, [selectedTable?.tableId, selectedTable?.currentPartySize, selectedTable?.reservationPartySize, selectedTable?.reservationTime]);
+  }, [selectedTable?.currentPartySize, selectedTable?.reservationPartySize, selectedTable?.reservationTime, selectedTable?.tableId]);
+
+  useEffect(() => {
+    if (!selectedTable || !pendingTableBanner || pendingTableBanner.tableId !== selectedTable.tableId) {
+      return;
+    }
+
+    const syncPendingBanner = () => {
+      if (selectedTable.pendingStatus !== pendingTableBanner.pendingStatus || !selectedTable.pendingStatusAt) {
+        setPendingTableBanner(null);
+        setTableStatusMessage(null);
+        setTableStatusMessageFading(false);
+        return;
+      }
+
+      const remainingMs = new Date(selectedTable.pendingStatusAt).getTime() - Date.now();
+      if (remainingMs <= 0) {
+        setTableStatusMessage(null);
+        setTableStatusMessageFading(false);
+        return;
+      }
+
+      setTableStatusMessage(
+        pendingBannerMessage(
+          selectedTable.displayName,
+          pendingTableBanner.pendingStatus,
+          remainingMs,
+          pendingTableBanner.actorName
+        )
+      );
+    };
+
+    syncPendingBanner();
+    const timer = window.setInterval(syncPendingBanner, 1000);
+    return () => window.clearInterval(timer);
+  }, [
+    pendingTableBanner,
+    selectedTable?.displayName,
+    selectedTable?.pendingStatus,
+    selectedTable?.pendingStatusAt,
+    selectedTable?.tableId
+  ]);
 
   const addToCart = (item: MenuItem) => {
     setCart((current) => {
@@ -210,7 +308,7 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
     } = {}
   ) => {
     if (!selectedTable) {
-      setTableStatusMessage("Choose a table before updating its status.");
+      showTableStatusMessage("Choose a table before updating its status.");
       return null;
     }
 
@@ -227,7 +325,22 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
         overrideReservationWarning: options.overrideReservationWarning
       });
       if (!options.silentSuccess) {
-        setTableStatusMessage(statusSuccessMessage(updated, options.immediate ?? false, waiterNameById, cleanerNameById));
+        showTableStatusMessage(statusSuccessMessage(updated, options.immediate ?? false, waiterNameById, cleanerNameById));
+      }
+      if (updated.pendingStatus === "AVAILABLE" && !options.immediate) {
+        setPendingTableBanner({
+          tableId: updated.tableId,
+          pendingStatus: "AVAILABLE",
+          actorName: updated.cleanerId ? cleanerNameById.get(updated.cleanerId) ?? updated.cleanerId : null
+        });
+      } else if (updated.pendingStatus === "NEEDS_CLEANING" && !options.immediate) {
+        setPendingTableBanner({
+          tableId: updated.tableId,
+          pendingStatus: "NEEDS_CLEANING",
+          actorName: null
+        });
+      } else {
+        setPendingTableBanner(null);
       }
       setReservationOverridePending(false);
       await refresh();
@@ -236,14 +349,16 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
       if (isApiRequestError(caughtError)) {
         if (caughtError.status === 409 && targetStatus === "OCCUPIED" && !options.overrideReservationWarning) {
           setReservationOverridePending(true);
-          setTableStatusMessage(`${caughtError.message} Use "Occupy now" again after confirming the override.`);
+          showTableStatusMessage(`${caughtError.message} Use "Occupy now" again after confirming the override.`);
         } else {
           setReservationOverridePending(false);
-          setTableStatusMessage(caughtError.message);
+          setPendingTableBanner(null);
+          showTableStatusMessage(caughtError.message);
         }
       } else {
         setReservationOverridePending(false);
-        setTableStatusMessage(caughtError instanceof Error ? caughtError.message : "Unable to update the table status.");
+        setPendingTableBanner(null);
+        showTableStatusMessage(caughtError instanceof Error ? caughtError.message : "Unable to update the table status.");
       }
       return null;
     } finally {
@@ -254,15 +369,24 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
   const handleSubmitOrder = async () => {
     if (!selectedTableId || !selectedTable || !selectedWaiterId || cart.length === 0) {
       setOrderNote("Choose a floor, section, table, and server before sending the order.");
+      setOrderAlerts([]);
       return;
     }
     if (selectedTable.status === "UNAVAILABLE") {
       setOrderNote("This table is unavailable in property settings and cannot accept a floor order.");
+      setOrderAlerts([]);
       return;
     }
 
     setBusyOrder(true);
     try {
+      const validation = await validateDineInOrder(cart);
+      if (!validation.valid) {
+        setOrderNote("We can’t send this order yet because some dishes do not have enough live stock.");
+        setOrderAlerts(validation.issues.map((issue) => issue.message));
+        return;
+      }
+      setOrderAlerts([]);
       if (selectedTable.status !== "OCCUPIED" || selectedTable.waiterId !== selectedWaiterId || !selectedTable.currentPartySize) {
         const occupiedTable = await applyTableStatus("OCCUPIED", { immediate: true, silentSuccess: true });
         if (!occupiedTable) {
@@ -283,9 +407,11 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
       });
       setCart([]);
       setOrderNote(`Order ${order.orderId} has been created and pushed into the kitchen flow.`);
+      setOrderAlerts([]);
       await refresh();
     } catch (caughtError) {
       setOrderNote(caughtError instanceof Error ? caughtError.message : "Failed to create order.");
+      setOrderAlerts([]);
     } finally {
       setBusyOrder(false);
     }
@@ -301,20 +427,52 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
     }
   };
 
-  const handlePayBill = async (bill: BillRecord) => {
-    setBusyBillId(bill.billId);
+  const handleOpenPaymentModal = (bill: BillRecord) => {
+    setPaymentBill(bill);
+    setPaymentMethod("UPI");
+    setPaymentMessage(null);
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!paymentBill) {
+      return;
+    }
+
+    setBusyBillId(paymentBill.billId);
     try {
-      await processBillPayment(bill);
-      if (bill.tableId) {
-        await updateTableStatus(bill.tableId, {
+      await processBillPayment(paymentBill, paymentMethod);
+      if (paymentBill.tableId) {
+        await updateTableStatus(paymentBill.tableId, {
           targetStatus: "NEEDS_CLEANING",
           immediate: false
         });
-        setTableStatusMessage("Payment received. This table will move to needs cleaning in 2 minutes unless you change it earlier.");
+        setPendingTableBanner({
+          tableId: paymentBill.tableId,
+          pendingStatus: "NEEDS_CLEANING",
+          actorName: null
+        });
       }
+      setPaymentBill(null);
+      setPaymentMessage(null);
       await refresh();
+    } catch (caughtError) {
+      setPaymentMessage(caughtError instanceof Error ? caughtError.message : "Unable to collect the payment.");
     } finally {
       setBusyBillId(null);
+    }
+  };
+
+  const handleServeReadyPickup = async (ticketId: string, orderId: string, tableName: string) => {
+    setBusyPickupTicketId(ticketId);
+    try {
+      await serveKitchenTicket(ticketId);
+      await markOrderServed(orderId);
+      showTableStatusMessage(`${tableName} is marked served and cleared from the pickup queue.`);
+      await refresh();
+    } catch (caughtError) {
+      showTableStatusMessage(caughtError instanceof Error ? caughtError.message : "Unable to mark this dish as served.");
+    } finally {
+      setBusyPickupTicketId(null);
     }
   };
 
@@ -336,8 +494,8 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
         <div className="pos-stats-grid">
           <StatCard label="Total orders today" value={String(data?.dailyInsight.totalOrdersToday ?? 0)} hint={`Busiest ${data?.dailyInsight.busiestTableId ?? "table"}`} tone="warm" />
           <StatCard label="Gross sales" value={`Rs ${data?.dailyInsight.grossSalesToday ?? 0}`} hint={`Top server ${data?.dailyInsight.topServerId ?? "pending"}`} tone="cool" />
-          <StatCard label="Active bills" value={String(data?.bills.length ?? 0)} hint="Draft and finalized bills" />
-          <StatCard label="Available tables" value={String((data?.tables ?? []).filter((table) => table.status === "AVAILABLE").length)} hint="Ready for new walk-ins" tone="neutral" />
+          <StatCard label="Active bills" value={String(liveBills.length)} hint="Draft and finalized bills" />
+          <StatCard label="Available tables" value={String(availableTableCount)} hint="Ready for new walk-ins" tone="neutral" />
         </div>
 
         <div className="pos-layout">
@@ -366,7 +524,9 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
                     setSelectedSectionName("");
                     setSelectedTableId(null);
                     setOrderNote(null);
+                    setOrderAlerts([]);
                     setTableStatusMessage(null);
+                    setTableStatusMessageFading(false);
                   }}
                   sectionOptions={sectionOptions}
                   selectedSectionName={selectedSectionName}
@@ -374,7 +534,9 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
                     setSelectedSectionName(value);
                     setSelectedTableId(null);
                     setOrderNote(null);
+                    setOrderAlerts([]);
                     setTableStatusMessage(null);
+                    setTableStatusMessageFading(false);
                   }}
                   waiterOptions={availableWaiters.map((waiter) => ({ employeeId: waiter.employeeId, name: waiter.name }))}
                   selectedWaiterId={selectedWaiterId}
@@ -391,6 +553,7 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
                   waiterNameById={waiterNameById}
                   cleanerNameById={cleanerNameById}
                   statusMessage={tableStatusMessage}
+                  statusMessageFading={tableStatusMessageFading}
                   reservationOverridePending={reservationOverridePending}
                   busyStatusChange={busyTableStatus}
                   onOccupyNow={async (overrideReservationWarning) =>
@@ -408,8 +571,49 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
               )}
             </SectionCard>
 
+            <SectionCard
+              title="Ready to pick and serve"
+              subtitle="Kitchen-ready dishes appear here with the table and server they belong to."
+              action={<StatusPill tone="success">{readyPickupQueue.length} ready</StatusPill>}
+            >
+              {readyPickupQueue.length === 0 ? (
+                <p className="pos-inline-note">Once the chef marks dishes ready, they will appear here for pickup and service.</p>
+              ) : (
+                <div className="pos-pickup-stack">
+                  {readyPickupQueue.map((entry) => (
+                    <article key={entry.ticketId} className="pos-pickup-card">
+                      <div className="pos-pickup-head">
+                        <div>
+                          <h3>{entry.tableName}</h3>
+                          <p>
+                            {entry.tableNumber} · {entry.waiterName}
+                          </p>
+                        </div>
+                        <StatusPill tone="success">Ready</StatusPill>
+                      </div>
+                      <p className="pos-pickup-items">
+                        {entry.items.length === 0
+                          ? "Dish details are syncing from the order."
+                          : entry.items.map((item) => `${item.quantity}× ${item.itemName}`).join(", ")}
+                      </p>
+                      <div className="pos-pickup-footer">
+                        <span>Ready at {new Date(entry.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+                        <Button
+                          variant="secondary"
+                          disabled={busyPickupTicketId === entry.ticketId}
+                          onClick={() => void handleServeReadyPickup(entry.ticketId, entry.orderId, entry.tableName)}
+                        >
+                          Mark served
+                        </Button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+
             <SectionCard title="Live bills" subtitle="Draft bills are created from the order flow and can be finalized or collected here.">
-              <BillingRail bills={data?.bills ?? []} busyBillId={busyBillId} onFinalize={handleFinalizeBill} onPay={handlePayBill} />
+              <BillingRail bills={liveBills} tableNameById={tableNameById} busyBillId={busyBillId} onFinalize={handleFinalizeBill} onPay={handleOpenPaymentModal} />
             </SectionCard>
           </div>
 
@@ -431,6 +635,7 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
                 onSubmit={handleSubmitOrder}
                 busy={busyOrder}
                 note={orderNote}
+                alerts={orderAlerts}
               />
             </SectionCard>
 
@@ -447,6 +652,63 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
             </SectionCard>
           </div>
         </div>
+
+        {paymentBill ? (
+          <div className="pos-table-modal-overlay" role="presentation">
+            <div className="pos-payment-modal" role="dialog" aria-modal="true" aria-labelledby="pos-payment-modal-title">
+              <div className="pos-table-modal-header">
+                <div>
+                  <h3 id="pos-payment-modal-title">Collect payment</h3>
+                  <p>
+                    {(paymentBill.tableId ? `${tableNameById.get(paymentBill.tableId) ?? "Table"} bill` : "Walk-in bill")} · Rs {paymentBill.total}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setPaymentBill(null);
+                    setPaymentMessage(null);
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
+              <div className="pos-table-modal-content">
+                <div className="pos-payment-methods">
+                  {(["UPI", "CARD", "CASH", "WALLET"] as PaymentMethod[]).map((method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      className={`pos-payment-method ${paymentMethod === method ? "selected" : ""}`}
+                      onClick={() => setPaymentMethod(method)}
+                    >
+                      {method}
+                    </button>
+                  ))}
+                </div>
+                <div className="pos-table-modal-note">
+                  <strong>Customer payment mode</strong>
+                  <span>Choose how the customer settled this bill, then collect it through the payment service.</span>
+                </div>
+                {paymentMessage ? <div className="pos-status-banner">{paymentMessage}</div> : null}
+                <div className="pos-table-modal-actions">
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setPaymentBill(null);
+                      setPaymentMessage(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button disabled={busyBillId === paymentBill.billId} onClick={() => void handleConfirmPayment()}>
+                    Confirm {paymentMethod}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </AppShell>
     </div>
   );
@@ -513,6 +775,36 @@ function statusSuccessMessage(
   return `${table.displayName} status has been updated.`;
 }
 
+function pendingBannerMessage(
+  displayName: string,
+  pendingStatus: "NEEDS_CLEANING" | "AVAILABLE",
+  remainingMs: number,
+  actorName: string | null
+) {
+  if (pendingStatus === "AVAILABLE") {
+    const cleanerLead = actorName ? `${actorName} has been assigned. ` : "";
+    return `${cleanerLead}${displayName} will return to available in ${formatRemaining(remainingMs)}.`;
+  }
+  return `${displayName} will move to needs cleaning in ${formatRemaining(remainingMs)}.`;
+}
+
+function formatRemaining(remainingMs: number) {
+  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes <= 0) {
+    return `${seconds}s`;
+  }
+  if (seconds === 0) {
+    return `${minutes}m`;
+  }
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+}
+
 function normalizeText(value: string) {
   return value.trim().toLowerCase();
+}
+
+function countReadyTables(tables: Array<{ status: TableStatus; pendingStatus: TableStatus | null }>) {
+  return tables.filter((table) => table.status === "AVAILABLE" && table.pendingStatus !== "NEEDS_CLEANING").length;
 }

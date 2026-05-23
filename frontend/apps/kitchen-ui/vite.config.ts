@@ -6,6 +6,6 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5174,
-    proxy: createOperationalProxy(["auth", "kitchen", "inventory", "insights"])
+    proxy: createOperationalProxy(["auth", "employee", "table", "order", "kitchen", "inventory", "insights"])
   }
 });

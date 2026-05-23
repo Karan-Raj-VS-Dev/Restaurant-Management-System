@@ -17,19 +17,6 @@ CREATE TABLE IF NOT EXISTS stock_items (
     UNIQUE (property_id, ingredient_id)
 );
 
-CREATE TABLE IF NOT EXISTS stock_batches (
-    batch_id VARCHAR(64) PRIMARY KEY,
-    stock_item_id VARCHAR(64) NOT NULL REFERENCES stock_items(stock_item_id) ON DELETE CASCADE,
-    tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom',
-    property_id VARCHAR(64) NOT NULL,
-    batch_code VARCHAR(64),
-    received_quantity NUMERIC(14, 3) NOT NULL CHECK (received_quantity >= 0),
-    remaining_quantity NUMERIC(14, 3) NOT NULL CHECK (remaining_quantity >= 0),
-    unit_cost NUMERIC(12, 2) CHECK (unit_cost >= 0),
-    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    expires_at TIMESTAMPTZ
-);
-
 CREATE TABLE IF NOT EXISTS operational_supplies (
     supply_id VARCHAR(64) PRIMARY KEY,
     tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom',
@@ -45,59 +32,10 @@ CREATE TABLE IF NOT EXISTS operational_supplies (
     UNIQUE (property_id, supply_code)
 );
 
-CREATE TABLE IF NOT EXISTS stock_movements (
-    movement_id VARCHAR(64) PRIMARY KEY,
-    stock_item_id VARCHAR(64) NOT NULL REFERENCES stock_items(stock_item_id) ON DELETE CASCADE,
-    tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom',
-    property_id VARCHAR(64) NOT NULL,
-    reference_type VARCHAR(64) NOT NULL,
-    reference_id VARCHAR(64),
-    movement_type VARCHAR(32) NOT NULL,
-    quantity NUMERIC(14, 3) NOT NULL CHECK (quantity > 0),
-    notes TEXT,
-    occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by VARCHAR(64)
-);
-
-CREATE TABLE IF NOT EXISTS stock_reservations (
-    reservation_id VARCHAR(64) PRIMARY KEY,
-    order_id VARCHAR(64) NOT NULL,
-    tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom',
-    property_id VARCHAR(64) NOT NULL,
-    reservation_status VARCHAR(32) NOT NULL DEFAULT 'RESERVED',
-    reserved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    released_at TIMESTAMPTZ,
-    UNIQUE (order_id)
-);
-
-CREATE TABLE IF NOT EXISTS stock_reservation_items (
-    reservation_item_id VARCHAR(64) PRIMARY KEY,
-    reservation_id VARCHAR(64) NOT NULL REFERENCES stock_reservations(reservation_id) ON DELETE CASCADE,
-    stock_item_id VARCHAR(64) NOT NULL REFERENCES stock_items(stock_item_id) ON DELETE CASCADE,
-    menu_item_id VARCHAR(64),
-    quantity_reserved NUMERIC(14, 3) NOT NULL CHECK (quantity_reserved > 0),
-    quantity_consumed NUMERIC(14, 3) NOT NULL DEFAULT 0 CHECK (quantity_consumed >= 0)
-);
-
-CREATE TABLE IF NOT EXISTS menu_item_availability (
-    availability_id VARCHAR(64) PRIMARY KEY,
-    tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom',
-    property_id VARCHAR(64) NOT NULL,
-    menu_item_id VARCHAR(64) NOT NULL,
-    is_available BOOLEAN NOT NULL DEFAULT TRUE,
-    unavailable_reason TEXT,
-    computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (property_id, menu_item_id)
-);
-
 ALTER TABLE stock_items ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom';
 ALTER TABLE stock_items ADD COLUMN IF NOT EXISTS market_unit_price NUMERIC(12, 2) NOT NULL DEFAULT 0;
 ALTER TABLE stock_items ADD COLUMN IF NOT EXISTS reorder_threshold NUMERIC(14, 3) NOT NULL DEFAULT 0;
 ALTER TABLE stock_items ADD COLUMN IF NOT EXISTS maximum_capacity NUMERIC(14, 3) NOT NULL DEFAULT 0;
-ALTER TABLE stock_batches ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom';
-ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom';
-ALTER TABLE stock_reservations ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom';
-ALTER TABLE menu_item_availability ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom';
 
 DO $$
 BEGIN
@@ -139,21 +77,11 @@ UPDATE stock_items
 SET tenant_id = 'bikini-bottom'
 WHERE tenant_id IS NULL;
 
-UPDATE stock_batches
-SET tenant_id = 'bikini-bottom'
-WHERE tenant_id IS NULL;
-
-UPDATE stock_movements
-SET tenant_id = 'bikini-bottom'
-WHERE tenant_id IS NULL;
-
-UPDATE stock_reservations
-SET tenant_id = 'bikini-bottom'
-WHERE tenant_id IS NULL;
-
-UPDATE menu_item_availability
-SET tenant_id = 'bikini-bottom'
-WHERE tenant_id IS NULL;
+DROP TABLE IF EXISTS stock_reservation_items;
+DROP TABLE IF EXISTS stock_reservations;
+DROP TABLE IF EXISTS stock_movements;
+DROP TABLE IF EXISTS stock_batches;
+DROP TABLE IF EXISTS menu_item_availability;
 
 INSERT INTO stock_items (
     stock_item_id, tenant_id, property_id, ingredient_id, ingredient_name, unit_of_measure,
@@ -257,13 +185,6 @@ CREATE INDEX IF NOT EXISTS idx_stock_items_property_ingredient ON stock_items(pr
 CREATE INDEX IF NOT EXISTS idx_stock_items_tenant_property_ingredient ON stock_items(tenant_id, property_id, ingredient_id);
 CREATE INDEX IF NOT EXISTS idx_stock_items_property_availability ON stock_items(property_id, available_quantity);
 CREATE INDEX IF NOT EXISTS idx_stock_items_tenant_property_availability ON stock_items(tenant_id, property_id, available_quantity);
-CREATE INDEX IF NOT EXISTS idx_stock_batches_stock_item_expiry ON stock_batches(stock_item_id, expires_at);
 CREATE INDEX IF NOT EXISTS idx_operational_supplies_tenant_property_status ON operational_supplies(tenant_id, property_id, status);
-CREATE INDEX IF NOT EXISTS idx_stock_movements_stock_item_time ON stock_movements(stock_item_id, occurred_at);
-CREATE INDEX IF NOT EXISTS idx_stock_reservations_property_status ON stock_reservations(property_id, reservation_status);
-CREATE INDEX IF NOT EXISTS idx_stock_reservations_tenant_property_status ON stock_reservations(tenant_id, property_id, reservation_status);
-CREATE INDEX IF NOT EXISTS idx_stock_reservation_items_reservation ON stock_reservation_items(reservation_id);
-CREATE INDEX IF NOT EXISTS idx_menu_item_availability_property_item ON menu_item_availability(property_id, menu_item_id);
-CREATE INDEX IF NOT EXISTS idx_menu_item_availability_tenant_property_item ON menu_item_availability(tenant_id, property_id, menu_item_id);
 CREATE INDEX IF NOT EXISTS idx_outbox_events_status_time ON outbox_events(status, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_inbox_events_status_time ON inbox_events(status, received_at);
