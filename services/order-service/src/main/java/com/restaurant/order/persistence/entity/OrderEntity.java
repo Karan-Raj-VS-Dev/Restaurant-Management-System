@@ -65,7 +65,7 @@ public class OrderEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    protected OrderEntity() {
+    public OrderEntity() {
     }
 
     @PrePersist

@@ -49,7 +49,7 @@ public class RestaurantTableEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    protected RestaurantTableEntity() {
+    public RestaurantTableEntity() {
     }
 
     @PrePersist

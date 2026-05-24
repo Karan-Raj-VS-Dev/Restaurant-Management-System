@@ -53,7 +53,7 @@ public class PaymentEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    protected PaymentEntity() {
+    public PaymentEntity() {
     }
 
     @PrePersist
