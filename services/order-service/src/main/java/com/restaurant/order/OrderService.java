@@ -145,7 +145,26 @@ public class OrderService {
 
     public OrderResponse markServed(String tenantId, String propertyId, String orderId) {
         OrderEntity order = updateStatus(tenantId, propertyId, orderId, OrderStatus.SERVED);
-        return toResponse(order, orderItemRepository.findByOrderIdOrderByCreatedAtAsc(orderId));
+        Instant now = Instant.now();
+        order.setServedAt(now);
+        order.setCancelledAt(null);
+        order.setCancellationReason(null);
+        List<OrderItemEntity> items = orderItemRepository.findByOrderIdOrderByCreatedAtAsc(orderId);
+        items.forEach(item -> item.setItemStatus(OrderStatus.SERVED.name()));
+        orderItemRepository.saveAll(items);
+        return toResponse(orderRepository.save(order), items);
+    }
+
+    public OrderResponse markCancelled(String tenantId, String propertyId, String orderId, CancelOrderRequest request) {
+        OrderEntity order = updateStatus(tenantId, propertyId, orderId, OrderStatus.CANCELLED);
+        Instant now = Instant.now();
+        order.setCancelledAt(now);
+        order.setServedAt(null);
+        order.setCancellationReason(request.reason().trim());
+        List<OrderItemEntity> items = orderItemRepository.findByOrderIdOrderByCreatedAtAsc(orderId);
+        items.forEach(item -> item.setItemStatus(OrderStatus.CANCELLED.name()));
+        orderItemRepository.saveAll(items);
+        return toResponse(orderRepository.save(order), items);
     }
 
     private OrderEntity updateStatus(String tenantId, String propertyId, String orderId, OrderStatus status) {
@@ -191,7 +210,10 @@ public class OrderService {
                 items.stream()
                         .map(item -> new OrderItem(item.getMenuItemId(), item.getItemName(), item.getQuantity(), item.getUnitPrice()))
                         .toList(),
-                entity.getOrderedAt()
+                entity.getOrderedAt(),
+                entity.getServedAt(),
+                entity.getCancelledAt(),
+                entity.getCancellationReason()
         );
     }
 

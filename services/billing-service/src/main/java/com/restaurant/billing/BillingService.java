@@ -60,6 +60,20 @@ public class BillingService {
         return toResponse(bill);
     }
 
+    public BillResponse finalizeBillCancellation(String tenantId, String propertyId, String billId, FinalizeCancellationBillRequest request) {
+        BillRecord bill = billingStore.finalizeCancellationBill(tenantId, propertyId, billId, request);
+        domainEventPublisher.publish(eventEnvelopeFactory.create(
+                EventKeys.BILL_FINALIZED,
+                AggregateTypes.BILL,
+                bill.billId(),
+                bill.orderId(),
+                bill.orderId(),
+                null,
+                new BillFinalizedEvent(bill.billId(), bill.orderId(), bill.tenantId(), bill.propertyId(), bill.total(), Instant.now())
+        ));
+        return toResponse(bill);
+    }
+
     public BillResponse getBill(String tenantId, String propertyId, String billId) {
         return toResponse(billingStore.getBill(tenantId, propertyId, billId));
     }
@@ -92,6 +106,9 @@ public class BillingService {
                 bill.orderIds(),
                 bill.tableId(),
                 BillStatus.valueOf(bill.status()),
+                BillSettlementType.valueOf(bill.settlementType()),
+                bill.cancellationReason(),
+                bill.cancellationFee(),
                 bill.items().stream()
                         .map(item -> new BillLine(item.itemId(), item.itemName(), item.quantity(), item.unitPrice()))
                         .toList(),

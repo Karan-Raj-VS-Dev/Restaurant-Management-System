@@ -61,6 +61,21 @@ public class BillingController {
         );
     }
 
+    @PostMapping("/{billId}/finalize-cancellation")
+    public BillResponse finalizeBillCancellation(@PathVariable String billId,
+                                                 @PathVariable(name = "tenantId", required = false) String scopedTenantId,
+                                                 @PathVariable(name = "propertyId", required = false) String scopedPropertyId,
+                                                 @RequestParam(name = "tenantId", required = false) String tenantId,
+                                                 @RequestParam(name = "propertyId", required = false) String propertyId,
+                                                 @Valid @RequestBody FinalizeCancellationBillRequest request) {
+        return billingService.finalizeBillCancellation(
+                resolveTenantId(scopedTenantId, tenantId),
+                resolvePropertyId(scopedPropertyId, propertyId),
+                billId,
+                request
+        );
+    }
+
     @GetMapping("/{billId}")
     public BillResponse getBill(@PathVariable String billId,
                                 @PathVariable(name = "tenantId", required = false) String scopedTenantId,

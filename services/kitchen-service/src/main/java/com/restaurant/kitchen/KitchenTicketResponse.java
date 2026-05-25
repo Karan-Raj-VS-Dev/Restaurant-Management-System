@@ -8,6 +8,8 @@ public record KitchenTicketResponse(
         String propertyId,
         String cookId,
         KitchenStatus status,
-        Instant updatedAt
+        Instant updatedAt,
+        String cancellationReason,
+        String reusedForTicketId
 ) {
 }

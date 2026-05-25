@@ -1,5 +1,6 @@
 package com.restaurant.billing.persistence.entity;
 
+import com.restaurant.billing.BillSettlementType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -38,6 +39,15 @@ public class BillEntity {
     @Column(name = "billing_status", nullable = false, length = 32)
     private String billingStatus;
 
+    @Column(name = "settlement_type", nullable = false, length = 32)
+    private String settlementType;
+
+    @Column(name = "cancellation_reason")
+    private String cancellationReason;
+
+    @Column(name = "cancellation_fee_amount", nullable = false, precision = 12, scale = 2)
+    private BigDecimal cancellationFeeAmount;
+
     @Column(name = "subtotal_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal subtotalAmount;
 
@@ -71,12 +81,24 @@ public class BillEntity {
         if (linkedOrderIds == null) {
             linkedOrderIds = orderId == null ? "" : orderId;
         }
+        if (settlementType == null) {
+            settlementType = BillSettlementType.STANDARD.name();
+        }
+        if (cancellationFeeAmount == null) {
+            cancellationFeeAmount = BigDecimal.ZERO;
+        }
     }
 
     @PreUpdate
     void onUpdate() {
         if (linkedOrderIds == null) {
             linkedOrderIds = orderId == null ? "" : orderId;
+        }
+        if (settlementType == null) {
+            settlementType = BillSettlementType.STANDARD.name();
+        }
+        if (cancellationFeeAmount == null) {
+            cancellationFeeAmount = BigDecimal.ZERO;
         }
     }
 
@@ -142,6 +164,30 @@ public class BillEntity {
 
     public void setBillingStatus(String billingStatus) {
         this.billingStatus = billingStatus;
+    }
+
+    public String getSettlementType() {
+        return settlementType;
+    }
+
+    public void setSettlementType(String settlementType) {
+        this.settlementType = settlementType;
+    }
+
+    public String getCancellationReason() {
+        return cancellationReason;
+    }
+
+    public void setCancellationReason(String cancellationReason) {
+        this.cancellationReason = cancellationReason;
+    }
+
+    public BigDecimal getCancellationFeeAmount() {
+        return cancellationFeeAmount;
+    }
+
+    public void setCancellationFeeAmount(BigDecimal cancellationFeeAmount) {
+        this.cancellationFeeAmount = cancellationFeeAmount;
     }
 
     public BigDecimal getSubtotalAmount() {

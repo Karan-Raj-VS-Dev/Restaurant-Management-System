@@ -26,6 +26,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class BillingStore {
 
     private static final BigDecimal DEFAULT_TAX_RATE = BigDecimal.valueOf(0.05);
+    private static final BigDecimal ZERO_AMOUNT = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
     private static final List<String> ACTIVE_BILL_STATUSES = List.of("DRAFT", "FINALIZED");
     private static final Map<String, BigDecimal> MENU_PRICES = Map.of(
             "item-001", BigDecimal.valueOf(299),
@@ -61,6 +62,26 @@ public class BillingStore {
                 .filter(bill -> tenantId.equals(bill.getTenantId()) && propertyId.equals(bill.getPropertyId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bill was not found."));
         entity.setBillingStatus("FINALIZED");
+        entity.setSettlementType(BillSettlementType.STANDARD.name());
+        BillEntity saved = billRepository.save(entity);
+        return toRecord(saved, billItemRepository.findByBillIdOrderByBillItemIdAsc(billId));
+    }
+
+    public BillRecord finalizeCancellationBill(String tenantId, String propertyId, String billId, FinalizeCancellationBillRequest request) {
+        BillEntity entity = billRepository.findById(billId)
+                .filter(bill -> tenantId.equals(bill.getTenantId()) && propertyId.equals(bill.getPropertyId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bill was not found."));
+        BigDecimal fee = scale(request.cancellationFee());
+        entity.setBillingStatus("FINALIZED");
+        entity.setSettlementType(BillSettlementType.CANCELLATION.name());
+        entity.setCancellationReason(request.reason().trim());
+        entity.setCancellationFeeAmount(fee);
+        entity.setSubtotalAmount(fee);
+        entity.setTaxAmount(ZERO_AMOUNT);
+        entity.setServiceChargeAmount(ZERO_AMOUNT);
+        entity.setDiscountAmount(ZERO_AMOUNT);
+        entity.setTotalAmount(fee);
+        entity.setClosedAt(null);
         BillEntity saved = billRepository.save(entity);
         return toRecord(saved, billItemRepository.findByBillIdOrderByBillItemIdAsc(billId));
     }
@@ -109,10 +130,13 @@ public class BillingStore {
         entity.setTableId(tableId);
         entity.setCustomerId(null);
         entity.setBillingStatus("DRAFT");
+        entity.setSettlementType(BillSettlementType.STANDARD.name());
+        entity.setCancellationReason(null);
+        entity.setCancellationFeeAmount(ZERO_AMOUNT);
         entity.setSubtotalAmount(snapshot.subtotal());
         entity.setTaxAmount(snapshot.tax());
-        entity.setServiceChargeAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
-        entity.setDiscountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+        entity.setServiceChargeAmount(ZERO_AMOUNT);
+        entity.setDiscountAmount(ZERO_AMOUNT);
         entity.setTotalAmount(snapshot.total());
         entity.setGeneratedAt(Instant.now());
         BillEntity saved = billRepository.save(entity);
@@ -147,6 +171,9 @@ public class BillingStore {
         existing.setOrderId(orderId);
         existing.setLinkedOrderIds(joinOrderIds(orderIds));
         existing.setBillingStatus("DRAFT");
+        existing.setSettlementType(BillSettlementType.STANDARD.name());
+        existing.setCancellationReason(null);
+        existing.setCancellationFeeAmount(ZERO_AMOUNT);
         existing.setSubtotalAmount(snapshot.subtotal());
         existing.setTaxAmount(snapshot.tax());
         existing.setTotalAmount(snapshot.total());
@@ -199,6 +226,9 @@ public class BillingStore {
                 bill.getPropertyId(),
                 bill.getTableId(),
                 bill.getBillingStatus(),
+                bill.getSettlementType(),
+                bill.getCancellationReason(),
+                scale(bill.getCancellationFeeAmount()),
                 items.stream().map(this::toLineRecord).toList(),
                 scale(bill.getSubtotalAmount()),
                 scale(bill.getTaxAmount()),

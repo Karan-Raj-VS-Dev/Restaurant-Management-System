@@ -103,6 +103,21 @@ public class OrderController {
         );
     }
 
+    @PatchMapping("/{orderId}/cancelled")
+    public OrderResponse markCancelled(@PathVariable String orderId,
+                                       @PathVariable(name = "tenantId", required = false) String scopedTenantId,
+                                       @PathVariable(name = "propertyId", required = false) String scopedPropertyId,
+                                       @RequestParam(name = "tenantId", required = false) String tenantId,
+                                       @RequestParam(name = "propertyId", required = false) String propertyId,
+                                       @Valid @RequestBody CancelOrderRequest request) {
+        return orderService.markCancelled(
+                resolveTenantId(scopedTenantId, tenantId),
+                resolvePropertyId(scopedPropertyId, propertyId),
+                orderId,
+                request
+        );
+    }
+
     private String resolveTenantId(String pathTenantId, String requestTenantId) {
         if (pathTenantId != null && !pathTenantId.isBlank()) {
             return pathTenantId;

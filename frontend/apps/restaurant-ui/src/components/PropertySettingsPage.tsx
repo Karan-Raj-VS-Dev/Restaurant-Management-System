@@ -60,6 +60,8 @@ type EditorState = {
   recordId?: string;
 } | null;
 
+type ModuleErrors = Partial<Record<ModuleId, string>>;
+
 type AreaSectionFormState = {
   floorName: string;
   sectionName: string;
@@ -160,6 +162,7 @@ export function PropertySettingsPage(props: PropertySettingsPageProps) {
   const [selectedModuleId, setSelectedModuleId] = useState<ModuleId>("areas-sections");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [moduleErrors, setModuleErrors] = useState<ModuleErrors>({});
   const [success, setSuccess] = useState<string | null>(null);
   const [overview, setOverview] = useState<PropertySettingsOverview | null>(null);
   const [areaSectionSummary, setAreaSectionSummary] = useState<AreaSectionSettingsSummary | null>(null);
@@ -181,31 +184,86 @@ export function PropertySettingsPage(props: PropertySettingsPageProps) {
   const [templateForm, setTemplateForm] = useState<BillingTemplatePayload>(defaultTemplateForm);
   const [templateJsonText, setTemplateJsonText] = useState(JSON.stringify(defaultTemplateDescription, null, 2));
 
+  const readMessage = (caughtError: unknown, fallback: string) => {
+    if (!(caughtError instanceof Error)) {
+      return fallback;
+    }
+    const message = caughtError.message.trim();
+    if (!message || /^Request failed with \d+$/i.test(message) || message === "Failed to fetch") {
+      return fallback;
+    }
+    return message;
+  };
+
   const refresh = async () => {
     setLoading(true);
     setError(null);
-    try {
-      const [nextOverview, nextAreaSections, nextTables, nextMenu, nextInventory, nextBilling, nextEmployees] = await Promise.all([
-        loadPropertySettingsOverview(),
-        loadAreaSectionSettingsSummary(),
-        loadTableSettingsSummary(),
-        loadMenuSettingsSummary(),
-        loadInventorySettingsSummary(),
-        loadBillingSettingsSummary(),
-        loadPropertyEmployees()
-      ]);
-      setOverview(nextOverview);
-      setAreaSectionSummary(nextAreaSections);
-      setTableSummary(nextTables);
-      setMenuSummary(nextMenu);
-      setInventorySummary(nextInventory);
-      setBillingSummary(nextBilling);
-      setPropertyEmployees(nextEmployees);
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unable to load property settings.");
-    } finally {
-      setLoading(false);
+    const nextModuleErrors: ModuleErrors = {};
+
+    const [
+      overviewResult,
+      areaSectionsResult,
+      tablesResult,
+      menuResult,
+      inventoryResult,
+      billingResult,
+      employeesResult
+    ] = await Promise.allSettled([
+      loadPropertySettingsOverview(),
+      loadAreaSectionSettingsSummary(),
+      loadTableSettingsSummary(),
+      loadMenuSettingsSummary(),
+      loadInventorySettingsSummary(),
+      loadBillingSettingsSummary(),
+      loadPropertyEmployees()
+    ]);
+
+    if (overviewResult.status === "fulfilled") {
+      setOverview(overviewResult.value);
+    } else if (!overview) {
+      setError(readMessage(overviewResult.reason, "Unable to load property settings overview."));
     }
+
+    if (areaSectionsResult.status === "fulfilled") {
+      setAreaSectionSummary(areaSectionsResult.value);
+    } else {
+      nextModuleErrors["areas-sections"] = readMessage(areaSectionsResult.reason, "Unable to load property areas and sections.");
+    }
+
+    if (tablesResult.status === "fulfilled") {
+      setTableSummary(tablesResult.value);
+    } else {
+      nextModuleErrors.tables = readMessage(tablesResult.reason, "Unable to load tables right now.");
+    }
+
+    if (menuResult.status === "fulfilled") {
+      setMenuSummary(menuResult.value);
+    } else {
+      nextModuleErrors["menu-recipes"] = readMessage(menuResult.reason, "Unable to load food and recipes right now.");
+    }
+
+    if (inventoryResult.status === "fulfilled") {
+      setInventorySummary(inventoryResult.value);
+    } else {
+      const inventoryMessage = readMessage(inventoryResult.reason, "Unable to load inventory settings right now.");
+      nextModuleErrors.ingredients = inventoryMessage;
+      nextModuleErrors.supplies = inventoryMessage;
+    }
+
+    if (billingResult.status === "fulfilled") {
+      setBillingSummary(billingResult.value);
+    } else {
+      const billingMessage = readMessage(billingResult.reason, "Unable to load billing settings right now.");
+      nextModuleErrors.taxes = billingMessage;
+      nextModuleErrors["billing-templates"] = billingMessage;
+    }
+
+    if (employeesResult.status === "fulfilled") {
+      setPropertyEmployees(employeesResult.value);
+    }
+
+    setModuleErrors(nextModuleErrors);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -216,6 +274,7 @@ export function PropertySettingsPage(props: PropertySettingsPageProps) {
   const selectedModule = modules.find((module) => module.moduleId === selectedModuleId) ?? null;
   const importSheets = overview?.importWorkbookSheets ?? [];
   const editorOpen = editor?.moduleId === selectedModuleId;
+  const selectedModuleError = moduleErrors[selectedModuleId] ?? null;
 
   const ingredientOptions = inventorySummary?.ingredients ?? [];
   const uniqueFloors = useMemo(
@@ -562,7 +621,11 @@ export function PropertySettingsPage(props: PropertySettingsPageProps) {
               title={selectedModule.title}
               subtitle={selectedModule.description}
               action={
-                selectedModuleId !== "bulk-import" && moduleActionLabel ? (
+                selectedModuleError ? (
+                  <Button variant="ghost" onClick={() => void refresh()}>
+                    Retry module
+                  </Button>
+                ) : selectedModuleId !== "bulk-import" && moduleActionLabel ? (
                   <Button variant="primary" onClick={() => openCreate(selectedModuleId)}>
                     {moduleActionLabel}
                   </Button>
@@ -573,6 +636,11 @@ export function PropertySettingsPage(props: PropertySettingsPageProps) {
             >
               <div className={`property-settings-editor-layout ${editorOpen ? "has-editor" : ""}`}>
                 <div className="property-settings-data-pane">
+                  {selectedModuleError ? (
+                    <div className="admin-alert admin-alert-error">
+                      Something went wrong while loading {selectedModule.title.toLowerCase()}. {selectedModuleError}
+                    </div>
+                  ) : null}
                   {selectedModuleId === "areas-sections" && areaSectionSummary ? (
                     <div className="admin-table-wrapper">
                       <table className="admin-table">
@@ -799,6 +867,21 @@ export function PropertySettingsPage(props: PropertySettingsPageProps) {
                       </div>
                     </SectionCard>
                   ) : null}
+                  {!selectedModuleError
+                  && selectedModuleId === "areas-sections"
+                  && !areaSectionSummary ? <p className="admin-inline-note">No area-section data is available right now.</p> : null}
+                  {!selectedModuleError
+                  && selectedModuleId === "tables"
+                  && !tableSummary ? <p className="admin-inline-note">No table data is available right now.</p> : null}
+                  {!selectedModuleError
+                  && selectedModuleId === "menu-recipes"
+                  && !menuSummary ? <p className="admin-inline-note">No menu data is available right now.</p> : null}
+                  {!selectedModuleError
+                  && (selectedModuleId === "ingredients" || selectedModuleId === "supplies")
+                  && !inventorySummary ? <p className="admin-inline-note">No inventory data is available right now.</p> : null}
+                  {!selectedModuleError
+                  && (selectedModuleId === "taxes" || selectedModuleId === "billing-templates")
+                  && !billingSummary ? <p className="admin-inline-note">No billing data is available right now.</p> : null}
                 </div>
 
                 {editorOpen ? (

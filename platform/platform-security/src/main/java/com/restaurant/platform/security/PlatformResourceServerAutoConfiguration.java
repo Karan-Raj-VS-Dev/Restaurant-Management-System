@@ -24,6 +24,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
+import org.springframework.util.AntPathMatcher;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.util.StringUtils;
 
@@ -82,10 +83,17 @@ public class PlatformResourceServerAutoConfiguration {
     @ConditionalOnMissingBean
     BearerTokenResolver bearerTokenResolver(PlatformSecurityProperties properties) {
         DefaultBearerTokenResolver defaultResolver = new DefaultBearerTokenResolver();
+        AntPathMatcher pathMatcher = new AntPathMatcher();
         return request -> {
             String authorizationToken = defaultResolver.resolve(request);
             if (StringUtils.hasText(authorizationToken)) {
                 return authorizationToken;
+            }
+            String requestPath = request.getRequestURI();
+            boolean permitAllPath = properties.getPermitAllPaths().stream()
+                    .anyMatch(pattern -> pathMatcher.match(pattern, requestPath));
+            if (permitAllPath) {
+                return null;
             }
             if (request.getCookies() == null) {
                 return null;

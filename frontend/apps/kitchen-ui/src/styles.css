@@ -187,6 +187,21 @@
   background: rgba(243, 247, 248, 0.86);
 }
 
+.kitchen-pickup-card-cancelled {
+  background: rgba(164, 74, 33, 0.12);
+  border: 1px solid rgba(164, 74, 33, 0.22);
+}
+
+.kitchen-pickup-card-dumped {
+  background: rgba(121, 56, 56, 0.1);
+  border: 1px solid rgba(121, 56, 56, 0.2);
+}
+
+.kitchen-pickup-card-reused {
+  background: rgba(15, 107, 124, 0.12);
+  border: 1px solid rgba(15, 107, 124, 0.2);
+}
+
 .kitchen-pickup-timestamp {
   margin: 10px 0 0;
   color: var(--rm-muted);
@@ -212,6 +227,25 @@
   margin: 10px 0 0;
   color: var(--rm-muted);
   font-size: 0.92rem;
+}
+
+.kitchen-pickup-note {
+  display: grid;
+  gap: 4px;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.kitchen-pickup-note-cancelled {
+  color: #8c3f24;
+}
+
+.kitchen-pickup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .kitchen-stock-layout {

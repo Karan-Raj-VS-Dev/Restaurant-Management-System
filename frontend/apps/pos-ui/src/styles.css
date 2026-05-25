@@ -503,6 +503,94 @@
   gap: 16px;
 }
 
+.pos-cancellation-modal {
+  width: min(920px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  border-radius: 22px;
+  padding: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(19, 32, 38, 0.08);
+  box-shadow: 0 20px 48px rgba(19, 32, 38, 0.16);
+  display: grid;
+  gap: 18px;
+}
+
+.pos-cancellation-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 16px;
+}
+
+.pos-cancellation-summary,
+.pos-cancellation-form {
+  display: grid;
+  gap: 14px;
+}
+
+.pos-cancellation-order-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.pos-cancellation-order-card,
+.pos-cancellation-fee-preview {
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(19, 32, 38, 0.08);
+}
+
+.pos-cancellation-order-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.pos-cancellation-order-head h4,
+.pos-cancellation-order-head p,
+.pos-cancellation-fee-preview strong {
+  margin: 0;
+}
+
+.pos-cancellation-order-head p {
+  margin-top: 4px;
+  color: var(--rm-muted);
+}
+
+.pos-cancellation-order-items {
+  margin: 12px 0 0;
+  padding-left: 1.2rem;
+  color: var(--rm-muted);
+}
+
+.pos-cancellation-order-items li {
+  margin: 0.25rem 0;
+}
+
+.pos-cancellation-field {
+  display: grid;
+  gap: 6px;
+}
+
+.pos-cancellation-field span {
+  font-size: 0.86rem;
+  color: var(--rm-muted);
+  font-weight: 600;
+}
+
+.pos-cancellation-field input,
+.pos-cancellation-field textarea {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(19, 32, 38, 0.1);
+  padding: 0.82rem 0.95rem;
+  background: rgba(255, 255, 255, 0.92);
+  font: inherit;
+  resize: vertical;
+}
+
 .pos-payment-methods {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -583,6 +671,10 @@
   }
 
   .pos-table-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pos-cancellation-grid {
     grid-template-columns: 1fr;
   }
 

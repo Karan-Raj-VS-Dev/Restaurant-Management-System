@@ -34,6 +34,12 @@ public class KitchenTicketEntity {
     @Column(name = "assigned_cook_id", length = 64)
     private String assignedCookId;
 
+    @Column(name = "cancellation_reason")
+    private String cancellationReason;
+
+    @Column(name = "reused_for_ticket_id", length = 64)
+    private String reusedForTicketId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -128,6 +134,22 @@ public class KitchenTicketEntity {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getCancellationReason() {
+        return cancellationReason;
+    }
+
+    public void setCancellationReason(String cancellationReason) {
+        this.cancellationReason = cancellationReason;
+    }
+
+    public String getReusedForTicketId() {
+        return reusedForTicketId;
+    }
+
+    public void setReusedForTicketId(String reusedForTicketId) {
+        this.reusedForTicketId = reusedForTicketId;
     }
 
     public Instant getAcceptedAt() {

@@ -1,11 +1,13 @@
 import {
-  assignTableToWaiter,
   AreaSectionSettingRecord,
   BillRecord,
   buildPickupQueue,
   buildAvailabilityMap,
+  cancelKitchenTicket,
+  cancelOrder,
   createDineInOrder,
   finalizeBill,
+  finalizeBillCancellation,
   isApiRequestError,
   loadPosSnapshot,
   markOrderServed,
@@ -18,7 +20,8 @@ import {
   type AuthSession,
   type EmployeeRecord,
   type MenuItem,
-  type OrderLine
+  type OrderLine,
+  type OrderRecord
 } from "@restaurant/api";
 import { DashboardContext, OperationalAccessGate, OperationalShellActions, useOperationalSessionBootstrap } from "../../../packages/operations/src";
 import { AppShell, Button, LivePulse, SectionCard, StatCard, StatusPill, usePollingResource } from "@restaurant/ui";
@@ -83,6 +86,10 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
   const [paymentBill, setPaymentBill] = useState<BillRecord | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("UPI");
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
+  const [cancellationBill, setCancellationBill] = useState<BillRecord | null>(null);
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [cancellationFee, setCancellationFee] = useState("");
+  const [cancellationMessage, setCancellationMessage] = useState<string | null>(null);
 
   const availability = buildAvailabilityMap(data?.availability ?? []);
   const menuById = new Map((data?.menu ?? []).map((item) => [item.itemId, item]));
@@ -146,6 +153,18 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
   );
   const liveBills = useMemo(() => (data?.bills ?? []).filter((bill) => bill.status !== "PAID"), [data?.bills]);
   const availableTableCount = useMemo(() => countReadyTables(data?.tables ?? []), [data?.tables]);
+  const cancellationOrders = useMemo(
+    () => (cancellationBill ? getLinkedOrdersForBill(cancellationBill, data?.orders ?? []) : []),
+    [cancellationBill, data?.orders]
+  );
+  const cancellationUnservedOrders = useMemo(
+    () => cancellationOrders.filter((order) => !isOrderSettledForDeparture(order)),
+    [cancellationOrders]
+  );
+  const cancellationPreviewItems = useMemo(
+    () => (cancellationBill ? summarizeBillItems(cancellationBill) : []),
+    [cancellationBill]
+  );
 
   useEffect(() => {
     if (!selectedFloorName && floorOptions.length > 0) {
@@ -204,6 +223,8 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
     setTableStatusMessageFading(false);
     setPendingTableBanner(null);
     setReservationOverridePending(false);
+    setOrderNote(null);
+    setOrderAlerts([]);
   }, [selectedTable?.tableId]);
 
   useEffect(() => {
@@ -377,6 +398,17 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
       setOrderAlerts([]);
       return;
     }
+    if (selectedTable.status !== "OCCUPIED") {
+      setOrderNote(`${selectedTable.displayName} is not occupied yet. Occupy the table before sending dishes to kitchen.`);
+      setOrderAlerts([]);
+      return;
+    }
+    if (selectedTable.status === "OCCUPIED" && selectedTable.waiterId && selectedTable.waiterId !== selectedWaiterId) {
+      const assignedWaiterName = waiterNameById.get(selectedTable.waiterId) ?? "another server";
+      setOrderNote(`${selectedTable.displayName} is already being served by ${assignedWaiterName}. Use the assigned server or return the table to available before reassigning it.`);
+      setOrderAlerts([]);
+      return;
+    }
 
     setBusyOrder(true);
     try {
@@ -387,19 +419,6 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
         return;
       }
       setOrderAlerts([]);
-      if (selectedTable.status !== "OCCUPIED" || selectedTable.waiterId !== selectedWaiterId || !selectedTable.currentPartySize) {
-        const occupiedTable = await applyTableStatus("OCCUPIED", { immediate: true, silentSuccess: true });
-        if (!occupiedTable) {
-          return;
-        }
-      } else {
-        await assignTableToWaiter({
-          tableId: selectedTableId,
-          propertyId: selectedTable.propertyId,
-          capacity: selectedTable.currentPartySize ?? selectedTable.capacity,
-          waiterId: selectedWaiterId
-        });
-      }
       const order = await createDineInOrder({
         tableId: selectedTableId,
         waiterId: selectedWaiterId,
@@ -417,11 +436,25 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
     }
   };
 
-  const handleFinalizeBill = async (billId: string) => {
-    setBusyBillId(billId);
+  const handleFinalizeBill = async (bill: BillRecord) => {
+    const linkedOrders = getLinkedOrdersForBill(bill, data?.orders ?? []);
+    const unservedOrders = linkedOrders.filter((order) => !isOrderSettledForDeparture(order));
+    if (unservedOrders.length > 0) {
+      setCancellationBill(bill);
+      setCancellationReason("");
+      setCancellationFee(String(bill.total));
+      setCancellationMessage(
+        `Some dishes for ${bill.tableId ? tableNameById.get(bill.tableId) ?? "this table" : "this bill"} were never served. Confirm the cancellation settlement before closing the bill.`
+      );
+      return;
+    }
+
+    setBusyBillId(bill.billId);
     try {
-      await finalizeBill(billId);
+      await finalizeBill(bill.billId);
       await refresh();
+    } catch (caughtError) {
+      showTableStatusMessage(caughtError instanceof Error ? caughtError.message : "Unable to finalize the bill.");
     } finally {
       setBusyBillId(null);
     }
@@ -441,6 +474,27 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
     setBusyBillId(paymentBill.billId);
     try {
       await processBillPayment(paymentBill, paymentMethod);
+      if (paymentBill.settlementType === "CANCELLATION") {
+        const reason = paymentBill.cancellationReason ?? "Customer left before the food was delivered.";
+        const linkedOrders = getLinkedOrdersForBill(paymentBill, data?.orders ?? []);
+        const unservedOrders = linkedOrders.filter((order) => !isOrderSettledForDeparture(order));
+        const cancellableTickets = (data?.tickets ?? []).filter(
+          (ticket) =>
+            unservedOrders.some((order) => order.orderId === ticket.orderId) &&
+            ticket.status !== "SERVED" &&
+            ticket.status !== "CANCELLED" &&
+            ticket.status !== "DUMPED" &&
+            ticket.status !== "REUSED"
+        );
+
+        for (const order of unservedOrders) {
+          await cancelOrder(order.orderId, reason);
+        }
+
+        for (const ticket of cancellableTickets) {
+          await cancelKitchenTicket(ticket.ticketId, reason);
+        }
+      }
       if (paymentBill.tableId) {
         await updateTableStatus(paymentBill.tableId, {
           targetStatus: "NEEDS_CLEANING",
@@ -454,9 +508,47 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
       }
       setPaymentBill(null);
       setPaymentMessage(null);
+      setCancellationBill(null);
+      setCancellationReason("");
+      setCancellationFee("");
+      setCancellationMessage(null);
       await refresh();
     } catch (caughtError) {
       setPaymentMessage(caughtError instanceof Error ? caughtError.message : "Unable to collect the payment.");
+    } finally {
+      setBusyBillId(null);
+    }
+  };
+
+  const handleConfirmCancellationSettlement = async () => {
+    if (!cancellationBill) {
+      return;
+    }
+
+    const trimmedReason = cancellationReason.trim();
+    const parsedFee = Number(cancellationFee);
+    if (!trimmedReason) {
+      setCancellationMessage("Please capture the cancellation reason before closing this bill.");
+      return;
+    }
+    if (!Number.isFinite(parsedFee) || parsedFee < 0) {
+      setCancellationMessage("Enter a valid cancellation amount to collect from the customer.");
+      return;
+    }
+
+    setBusyBillId(cancellationBill.billId);
+    try {
+      const finalizedBill = await finalizeBillCancellation(cancellationBill.billId, trimmedReason, parsedFee);
+      setCancellationBill(null);
+      setCancellationReason("");
+      setCancellationFee("");
+      setCancellationMessage(null);
+      setPaymentBill(finalizedBill);
+      setPaymentMethod("UPI");
+      setPaymentMessage(null);
+      await refresh();
+    } catch (caughtError) {
+      setCancellationMessage(caughtError instanceof Error ? caughtError.message : "Unable to finalize the cancellation settlement.");
     } finally {
       setBusyBillId(null);
     }
@@ -709,9 +801,149 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
             </div>
           </div>
         ) : null}
+
+        {cancellationBill ? (
+          <div className="pos-table-modal-overlay" role="presentation">
+            <div className="pos-cancellation-modal" role="dialog" aria-modal="true" aria-labelledby="pos-cancellation-modal-title">
+              <div className="pos-table-modal-header">
+                <div>
+                  <h3 id="pos-cancellation-modal-title">Cancel undelivered order</h3>
+                  <p>
+                    {(cancellationBill.tableId ? `${tableNameById.get(cancellationBill.tableId) ?? "Table"} bill` : "Walk-in bill")} · Rs {cancellationBill.total}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setCancellationBill(null);
+                    setCancellationReason("");
+                    setCancellationFee("");
+                    setCancellationMessage(null);
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
+              <div className="pos-cancellation-grid">
+                <div className="pos-cancellation-summary">
+                  <div className="pos-table-modal-note">
+                    <strong>Food was not delivered</strong>
+                    <span>Review the linked orders, capture the cancellation reason, and decide the settlement amount before collecting payment.</span>
+                  </div>
+                  <div className="pos-cancellation-order-stack">
+                    {cancellationOrders.map((order) => (
+                      <article key={order.orderId} className="pos-cancellation-order-card">
+                        <div className="pos-cancellation-order-head">
+                          <div>
+                            <h4>{isOrderSettledForDeparture(order) ? "Served order" : "Unserved order"}</h4>
+                            <p>{order.orderId}</p>
+                          </div>
+                          <StatusPill tone={isOrderSettledForDeparture(order) ? "success" : "warning"}>{order.status}</StatusPill>
+                        </div>
+                        <ul className="pos-cancellation-order-items">
+                          {order.items.map((item) => (
+                            <li key={`${order.orderId}-${item.itemId}`}>
+                              <span>{item.quantity}× {item.itemName}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </article>
+                    ))}
+                  </div>
+                  <div className="pos-cancellation-fee-preview">
+                    <strong>Existing bill items</strong>
+                    <div className="pos-bill-line-items">
+                      {cancellationPreviewItems.map((item) => (
+                        <div key={item.itemId} className="pos-bill-line-item">
+                          <span>
+                            {item.quantity}× {item.itemName}
+                          </span>
+                          <strong>Rs {(item.quantity * item.unitPrice).toFixed(2)}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pos-cancellation-form">
+                  <label className="pos-cancellation-field">
+                    <span>Cancellation reason</span>
+                    <textarea
+                      value={cancellationReason}
+                      onChange={(event) => setCancellationReason(event.target.value)}
+                      rows={4}
+                      placeholder="Example: customer left before delivery, food changed, or service issue."
+                    />
+                  </label>
+                  <label className="pos-cancellation-field">
+                    <span>Cancellation fee to collect (Rs)</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={cancellationFee}
+                      onChange={(event) => setCancellationFee(event.target.value)}
+                    />
+                  </label>
+                  <div className="pos-table-modal-note">
+                    <strong>Unserved orders</strong>
+                    <span>
+                      {cancellationUnservedOrders.length === 0
+                        ? "Everything linked to this bill was already served."
+                        : `${cancellationUnservedOrders.length} linked order${cancellationUnservedOrders.length === 1 ? "" : "s"} will be marked cancelled after payment.`}
+                    </span>
+                  </div>
+                  {cancellationMessage ? <div className="pos-status-banner">{cancellationMessage}</div> : null}
+                  <div className="pos-table-modal-actions">
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setCancellationBill(null);
+                        setCancellationReason("");
+                        setCancellationFee("");
+                        setCancellationMessage(null);
+                      }}
+                    >
+                      Keep bill open
+                    </Button>
+                    <Button
+                      disabled={busyBillId === cancellationBill.billId}
+                      onClick={() => void handleConfirmCancellationSettlement()}
+                    >
+                      Finalize cancellation
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </AppShell>
     </div>
   );
+}
+
+function getLinkedOrdersForBill(bill: BillRecord, orders: OrderRecord[]) {
+  const orderIds = new Set(bill.orderIds ?? [bill.orderId]);
+  return orders.filter((order) => orderIds.has(order.orderId));
+}
+
+function isOrderSettledForDeparture(order: OrderRecord) {
+  return order.status === "SERVED" || order.status === "CANCELLED";
+}
+
+function summarizeBillItems(bill: BillRecord) {
+  const byItemId = new Map<string, { itemId: string; itemName: string; quantity: number; unitPrice: number }>();
+  for (const item of bill.items) {
+    const current = byItemId.get(item.itemId);
+    if (current) {
+      current.quantity += item.quantity;
+      current.unitPrice = item.unitPrice;
+    } else {
+      byItemId.set(item.itemId, { ...item });
+    }
+  }
+  return Array.from(byItemId.values()).sort((left, right) => left.itemName.localeCompare(right.itemName));
 }
 
 function resolveAvailableWaiters(

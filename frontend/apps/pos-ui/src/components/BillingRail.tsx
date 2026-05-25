@@ -5,7 +5,7 @@ export function BillingRail(props: {
   bills: BillRecord[];
   tableNameById: Map<string, string>;
   busyBillId: string | null;
-  onFinalize: (billId: string) => Promise<void>;
+  onFinalize: (bill: BillRecord) => Promise<void>;
   onPay: (bill: BillRecord) => void;
 }) {
   if (props.bills.length === 0) {
@@ -44,7 +44,7 @@ export function BillingRail(props: {
               <Button
                 variant="ghost"
                 disabled={bill.status !== "DRAFT" || props.busyBillId === bill.billId}
-                onClick={() => props.onFinalize(bill.billId)}
+                onClick={() => props.onFinalize(bill)}
               >
                 Finalize
               </Button>

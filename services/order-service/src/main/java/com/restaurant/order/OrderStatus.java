@@ -5,6 +5,7 @@ public enum OrderStatus {
     IN_KITCHEN,
     READY_TO_SERVE,
     SERVED,
+    CANCELLED,
     BILLING_PENDING,
     CLOSED
 }

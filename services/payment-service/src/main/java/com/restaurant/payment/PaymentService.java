@@ -29,20 +29,21 @@ public class PaymentService {
 
     public PaymentResponse processPayment(String tenantId, String propertyId, ProcessPaymentRequest request) {
         Instant now = Instant.now();
-        PaymentEntity entity = new PaymentEntity();
-        entity.setPaymentId("pay-" + UUID.randomUUID());
-        entity.setBillId(request.billId());
-        entity.setOrderId(null);
-        entity.setTenantId(tenantId);
-        entity.setPropertyId(propertyId);
-        entity.setPaymentReference("ref-" + UUID.randomUUID());
-        entity.setPaymentMethod(request.method().name());
-        entity.setPaymentStatus(PaymentStatus.SUCCESS.name());
-        entity.setAmount(request.amount());
-        entity.setCurrencyCode("INR");
-        entity.setPaidAt(now);
-        entity.setCreatedAt(now);
-        entity.setUpdatedAt(now);
+        PaymentEntity entity = PaymentEntity.create(
+                "pay-" + UUID.randomUUID(),
+                request.billId(),
+                null,
+                tenantId,
+                propertyId,
+                "ref-" + UUID.randomUUID(),
+                request.method().name(),
+                PaymentStatus.SUCCESS.name(),
+                request.amount(),
+                "INR",
+                now,
+                now,
+                now
+        );
         PaymentEntity saved = paymentRepository.save(entity);
 
         PaymentResponse response = new PaymentResponse(

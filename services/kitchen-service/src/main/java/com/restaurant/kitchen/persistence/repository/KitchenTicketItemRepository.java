@@ -6,7 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface KitchenTicketItemRepository extends JpaRepository<KitchenTicketItemEntity, String> {
 
-    List<KitchenTicketItemEntity> findByTicketIdOrderByCreatedAtAsc(String ticketId);
+    List<KitchenTicketItemEntity> findByTicketIdOrderByOrderItemIdAsc(String ticketId);
 
     void deleteByTicketId(String ticketId);
 }

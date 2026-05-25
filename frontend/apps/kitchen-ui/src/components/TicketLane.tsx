@@ -77,17 +77,19 @@ export function TicketLane(props: {
                   <span>{selectedCookName ? `Chef ${selectedCookName}` : "Select a chef for this ticket"}</span>
                   <span>{new Date(ticket.updatedAt).toLocaleTimeString()}</span>
                 </div>
-                <label className="kitchen-chef-select">
-                  <span>Chef</span>
-                  <select value={selectedCookId} onChange={(event) => props.onCookChange(ticket.ticketId, event.target.value)}>
-                    <option value="">{props.cookOptions.length === 0 ? "No chefs available" : "Select chef"}</option>
-                    {props.cookOptions.map((cook) => (
-                      <option key={cook.employeeId} value={cook.employeeId}>
-                        {cook.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {ticket.status === "RECEIVED" ? (
+                  <label className="kitchen-chef-select">
+                    <span>Chef</span>
+                    <select value={selectedCookId} onChange={(event) => props.onCookChange(ticket.ticketId, event.target.value)}>
+                      <option value="">{props.cookOptions.length === 0 ? "No chefs available" : "Select chef"}</option>
+                      {props.cookOptions.map((cook) => (
+                        <option key={cook.employeeId} value={cook.employeeId}>
+                          {cook.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 {remainingMs !== null ? (
                   <div className="kitchen-ticket-timer-block">
                     <div className="kitchen-ticket-timer-meta">

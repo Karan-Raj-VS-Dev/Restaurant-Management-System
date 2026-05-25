@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS kitchen_tickets (
     table_id VARCHAR(64),
     ticket_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
     assigned_cook_id VARCHAR(64),
+    cancellation_reason TEXT,
+    reused_for_ticket_id VARCHAR(64),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     accepted_at TIMESTAMPTZ,
     ready_at TIMESTAMPTZ,
@@ -13,6 +15,8 @@ CREATE TABLE IF NOT EXISTS kitchen_tickets (
 );
 
 ALTER TABLE kitchen_tickets ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom';
+ALTER TABLE kitchen_tickets ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
+ALTER TABLE kitchen_tickets ADD COLUMN IF NOT EXISTS reused_for_ticket_id VARCHAR(64);
 
 UPDATE kitchen_tickets
 SET tenant_id = 'bikini-bottom'

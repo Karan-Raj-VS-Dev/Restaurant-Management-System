@@ -10,6 +10,9 @@ public record OrderResponse(
         String waiterId,
         OrderStatus status,
         List<OrderItem> items,
-        Instant createdAt
+        Instant createdAt,
+        Instant servedAt,
+        Instant cancelledAt,
+        String cancellationReason
 ) {
 }

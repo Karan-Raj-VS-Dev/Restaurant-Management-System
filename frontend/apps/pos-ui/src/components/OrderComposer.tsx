@@ -59,11 +59,25 @@ export function OrderComposer(props: {
           <div className="pos-order-total-label">Estimated total</div>
           <div className="pos-order-total">Rs {total}</div>
         </div>
-        <Button disabled={!props.selectedTable || !props.waiterName || props.cart.length === 0 || props.busy} onClick={props.onSubmit}>
+        <Button
+          disabled={
+            !props.selectedTable ||
+            props.selectedTable.status !== "OCCUPIED" ||
+            !props.waiterName ||
+            props.cart.length === 0 ||
+            props.busy
+          }
+          onClick={props.onSubmit}
+        >
           {props.busy ? "Sending order..." : "Send to kitchen"}
         </Button>
       </div>
 
+      {props.selectedTable && props.selectedTable.status !== "OCCUPIED" ? (
+        <p className="pos-note">
+          Occupy this table before sending dishes to the kitchen.
+        </p>
+      ) : null}
       {props.note ? <p className="pos-note">{props.note}</p> : null}
       {props.alerts && props.alerts.length > 0 ? (
         <div className="pos-note-list">

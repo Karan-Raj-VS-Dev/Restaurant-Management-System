@@ -30,8 +30,9 @@ export interface RuntimeScope {
 }
 
 export type TableStatus = "AVAILABLE" | "UNAVAILABLE" | "RESERVED" | "OCCUPIED" | "NEEDS_CLEANING";
-export type KitchenStatus = "RECEIVED" | "ACCEPTED" | "PREPARING" | "READY" | "SERVED";
+export type KitchenStatus = "RECEIVED" | "ACCEPTED" | "PREPARING" | "READY" | "SERVED" | "CANCELLED" | "DUMPED" | "REUSED";
 export type BillStatus = "DRAFT" | "FINALIZED" | "PAID";
+export type BillSettlementType = "STANDARD" | "CANCELLATION";
 export type PaymentMethod = "CASH" | "CARD" | "UPI" | "WALLET";
 
 export interface TableRecord {
@@ -99,6 +100,9 @@ export interface OrderRecord {
   status: string;
   items: OrderLine[];
   createdAt: string;
+  servedAt: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
 }
 
 export interface BillRecord {
@@ -107,6 +111,9 @@ export interface BillRecord {
   orderIds?: string[];
   tableId: string | null;
   status: BillStatus;
+  settlementType: BillSettlementType;
+  cancellationReason: string | null;
+  cancellationFee: number;
   items: Array<{ itemId: string; itemName: string; quantity: number; unitPrice: number }>;
   subtotal: number;
   tax: number;
@@ -134,6 +141,8 @@ export interface KitchenTicket {
   cookId: string;
   status: KitchenStatus;
   updatedAt: string;
+  cancellationReason: string | null;
+  reusedForTicketId: string | null;
 }
 
 export interface KitchenTicketDetail {
@@ -149,6 +158,8 @@ export interface KitchenTicketDetail {
   items: OrderLine[];
   status: KitchenStatus;
   updatedAt: string;
+  cancellationReason: string | null;
+  reusedForTicketId: string | null;
 }
 
 export interface StockItem {
@@ -673,7 +684,9 @@ export function buildKitchenTicketDetails(
             : "Chef pending",
         items: order?.items ?? [],
         status: ticket.status,
-        updatedAt: ticket.updatedAt
+        updatedAt: ticket.updatedAt,
+        cancellationReason: ticket.cancellationReason,
+        reusedForTicketId: ticket.reusedForTicketId
       } satisfies KitchenTicketDetail;
     })
     .sort((left, right) => new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime());
@@ -983,12 +996,20 @@ export async function validateDineInOrder(items: OrderLine[]) {
 }
 
 export async function loginWithCredentials(username: string, password: string) {
-  const session = await fetchJson<AuthSession>(tenantApiUrl("auth", "/api/auth/login"), undefined, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-    skipAuth: true
-  });
+  let session: AuthSession;
+  try {
+    session = await fetchJson<AuthSession>(tenantApiUrl("auth", "/api/auth/login"), undefined, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+      skipAuth: true
+    });
+  } catch (error) {
+    if (isApiRequestError(error) && error.status === 401) {
+      throw new ApiRequestError("Invalid username or password.", 401, error.fieldErrors);
+    }
+    throw error;
+  }
   persistRestaurantSession(session);
   return session;
 }
@@ -1280,6 +1301,17 @@ export async function finalizeBill(billId: string) {
   return fetchJson<BillRecord>(propertyApiUrl("billing", `/api/bills/${billId}/finalize`), undefined, { method: "POST" });
 }
 
+export async function finalizeBillCancellation(billId: string, reason: string, cancellationFee: number) {
+  return fetchJson<BillRecord>(propertyApiUrl("billing", `/api/bills/${billId}/finalize-cancellation`), undefined, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      reason,
+      cancellationFee
+    })
+  });
+}
+
 export async function processBillPayment(bill: BillRecord, method: PaymentMethod) {
   return fetchJson(propertyApiUrl("payment", "/api/payments"), undefined, {
     method: "POST",
@@ -1323,6 +1355,36 @@ export async function markOrderReadyToServe(orderId: string) {
 export async function markOrderServed(orderId: string) {
   return fetchJson<OrderRecord>(propertyApiUrl("order", `/api/orders/${orderId}/served`), undefined, {
     method: "PATCH"
+  });
+}
+
+export async function cancelOrder(orderId: string, reason: string) {
+  return fetchJson<OrderRecord>(propertyApiUrl("order", `/api/orders/${orderId}/cancelled`), undefined, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason })
+  });
+}
+
+export async function cancelKitchenTicket(ticketId: string, reason: string) {
+  return fetchJson<KitchenTicket>(propertyApiUrl("kitchen", `/api/kitchen/tickets/${ticketId}/cancelled`), undefined, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason })
+  });
+}
+
+export async function dumpKitchenTicket(ticketId: string) {
+  return fetchJson<KitchenTicket>(propertyApiUrl("kitchen", `/api/kitchen/tickets/${ticketId}/dumped`), undefined, {
+    method: "PATCH"
+  });
+}
+
+export async function reuseKitchenTicket(ticketId: string, reuseTicketId: string) {
+  return fetchJson<KitchenTicket>(propertyApiUrl("kitchen", `/api/kitchen/tickets/${ticketId}/reused`), undefined, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reuseTicketId })
   });
 }
 

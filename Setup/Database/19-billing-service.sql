@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS bills (
     table_id VARCHAR(64),
     customer_id VARCHAR(64),
     billing_status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
+    settlement_type VARCHAR(32) NOT NULL DEFAULT 'STANDARD',
+    cancellation_reason TEXT,
+    cancellation_fee_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (cancellation_fee_amount >= 0),
     subtotal_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (subtotal_amount >= 0),
     tax_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
     service_charge_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (service_charge_amount >= 0),
@@ -18,6 +21,9 @@ CREATE TABLE IF NOT EXISTS bills (
 
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom';
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS linked_order_ids TEXT NOT NULL DEFAULT '';
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS settlement_type VARCHAR(32) NOT NULL DEFAULT 'STANDARD';
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancellation_fee_amount NUMERIC(12, 2) NOT NULL DEFAULT 0;
 
 UPDATE bills
 SET tenant_id = 'bikini-bottom'

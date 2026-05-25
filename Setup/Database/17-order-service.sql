@@ -14,11 +14,17 @@ CREATE TABLE IF NOT EXISTS orders (
     discount_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
     total_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
     special_instructions TEXT,
+    served_at TIMESTAMPTZ,
+    cancelled_at TIMESTAMPTZ,
+    cancellation_reason TEXT,
     ordered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS served_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
 
 UPDATE orders
 SET tenant_id = 'bikini-bottom'

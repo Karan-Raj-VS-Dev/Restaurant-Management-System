@@ -3,9 +3,7 @@ package com.restaurant.kitchen.persistence.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import java.time.Instant;
 
 @Entity
 @Table(name = "kitchen_ticket_items")
@@ -33,17 +31,7 @@ public class KitchenTicketItemEntity {
     @Column(name = "prep_status", nullable = false, length = 32)
     private String prepStatus;
 
-    @Column(name = "created_at")
-    private Instant createdAt;
-
     protected KitchenTicketItemEntity() {
-    }
-
-    @PrePersist
-    void onCreate() {
-        if (createdAt == null) {
-            createdAt = Instant.now();
-        }
     }
 
     public String getTicketItemId() {
@@ -100,14 +88,6 @@ public class KitchenTicketItemEntity {
 
     public void setPrepStatus(String prepStatus) {
         this.prepStatus = prepStatus;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(Instant createdAt) {
-        this.createdAt = createdAt;
     }
 
     public static KitchenTicketItemEntity create(String ticketItemId,

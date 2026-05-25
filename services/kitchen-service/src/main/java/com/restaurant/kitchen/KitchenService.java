@@ -97,6 +97,71 @@ public class KitchenService {
         return toResponse(ticket);
     }
 
+    public KitchenTicketResponse markCancelled(String tenantId, String propertyId, String ticketId, UpdateKitchenTicketRequest request) {
+        KitchenTicketEntity ticket = updateStatus(
+                tenantId,
+                propertyId,
+                ticketId,
+                KitchenStatus.CANCELLED,
+                request == null ? null : request.cookId()
+        );
+        ticket.setCancellationReason(request == null || request.reason() == null ? null : request.reason().trim());
+        KitchenTicketEntity saved = kitchenTicketRepository.save(ticket);
+        publishStatusUpdate(saved);
+        return toResponse(saved);
+    }
+
+    public KitchenTicketResponse markDumped(String tenantId, String propertyId, String ticketId) {
+        KitchenTicketEntity ticket = updateStatus(tenantId, propertyId, ticketId, KitchenStatus.DUMPED, null);
+        KitchenTicketEntity saved = kitchenTicketRepository.save(ticket);
+        publishStatusUpdate(saved);
+        return toResponse(saved);
+    }
+
+    public KitchenTicketResponse markReused(String tenantId, String propertyId, String ticketId, UpdateKitchenTicketRequest request) {
+        if (request == null || request.reuseTicketId() == null || request.reuseTicketId().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose the new order that should reuse this dish.");
+        }
+        KitchenTicketEntity source = kitchenTicketRepository.findById(ticketId)
+                .filter(ticket -> tenantId.equals(ticket.getTenantId()) && propertyId.equals(ticket.getPropertyId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Kitchen ticket was not found."));
+        if (!KitchenStatus.CANCELLED.name().equals(source.getTicketStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only cancelled dishes can be reused.");
+        }
+        KitchenTicketEntity target = kitchenTicketRepository.findById(request.reuseTicketId().trim())
+                .filter(ticket -> tenantId.equals(ticket.getTenantId()) && propertyId.equals(ticket.getPropertyId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "The target kitchen ticket was not found."));
+        if (KitchenStatus.SERVED.name().equals(target.getTicketStatus())
+                || KitchenStatus.CANCELLED.name().equals(target.getTicketStatus())
+                || KitchenStatus.DUMPED.name().equals(target.getTicketStatus())
+                || KitchenStatus.REUSED.name().equals(target.getTicketStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "That ticket can no longer receive reused dishes.");
+        }
+
+        Instant now = Instant.now();
+        source.setTicketStatus(KitchenStatus.REUSED.name());
+        source.setReusedForTicketId(target.getTicketId());
+        source.setCompletedAt(now);
+        KitchenTicketEntity savedSource = kitchenTicketRepository.save(source);
+
+        target.setTicketStatus(KitchenStatus.READY.name());
+        target.setAssignedCookId(source.getAssignedCookId() != null ? source.getAssignedCookId() : target.getAssignedCookId());
+        target.setReadyAt(now);
+        KitchenTicketEntity savedTarget = kitchenTicketRepository.save(target);
+
+        List<KitchenTicketItemEntity> sourceItems = kitchenTicketItemRepository.findByTicketIdOrderByOrderItemIdAsc(source.getTicketId());
+        sourceItems.forEach(item -> item.setPrepStatus(KitchenStatus.REUSED.name()));
+        kitchenTicketItemRepository.saveAll(sourceItems);
+
+        List<KitchenTicketItemEntity> targetItems = kitchenTicketItemRepository.findByTicketIdOrderByOrderItemIdAsc(target.getTicketId());
+        targetItems.forEach(item -> item.setPrepStatus(KitchenStatus.READY.name()));
+        kitchenTicketItemRepository.saveAll(targetItems);
+
+        publishStatusUpdate(savedSource);
+        publishStatusUpdate(savedTarget);
+        return toResponse(savedSource);
+    }
+
     private KitchenTicketEntity createTicketEntity(String orderId,
                                                    String tenantId,
                                                    String propertyId,
@@ -161,17 +226,23 @@ public class KitchenService {
         if (nextStatus == KitchenStatus.READY) {
             entity.setReadyAt(now);
         }
-        if (nextStatus == KitchenStatus.SERVED) {
+        if (nextStatus == KitchenStatus.SERVED
+                || nextStatus == KitchenStatus.CANCELLED
+                || nextStatus == KitchenStatus.DUMPED
+                || nextStatus == KitchenStatus.REUSED) {
             entity.setCompletedAt(now);
         }
         KitchenTicketEntity saved = kitchenTicketRepository.save(entity);
 
-        List<KitchenTicketItemEntity> items = kitchenTicketItemRepository.findByTicketIdOrderByCreatedAtAsc(ticketId);
+        List<KitchenTicketItemEntity> items = kitchenTicketItemRepository.findByTicketIdOrderByOrderItemIdAsc(ticketId);
         String prepStatus = switch (nextStatus) {
             case RECEIVED -> KitchenStatus.RECEIVED.name();
             case ACCEPTED, PREPARING -> KitchenStatus.PREPARING.name();
             case READY -> KitchenStatus.READY.name();
             case SERVED -> KitchenStatus.SERVED.name();
+            case CANCELLED -> KitchenStatus.CANCELLED.name();
+            case DUMPED -> KitchenStatus.DUMPED.name();
+            case REUSED -> KitchenStatus.REUSED.name();
         };
         items.forEach(item -> item.setPrepStatus(prepStatus));
         kitchenTicketItemRepository.saveAll(items);
@@ -232,7 +303,9 @@ public class KitchenService {
                 ticket.getPropertyId(),
                 ticket.getAssignedCookId() == null ? "cook-pending" : ticket.getAssignedCookId(),
                 KitchenStatus.valueOf(ticket.getTicketStatus()),
-                updatedAt
+                updatedAt,
+                ticket.getCancellationReason(),
+                ticket.getReusedForTicketId()
         );
     }
 

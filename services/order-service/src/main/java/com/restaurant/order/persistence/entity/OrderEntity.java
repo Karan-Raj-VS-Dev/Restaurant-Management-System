@@ -59,6 +59,15 @@ public class OrderEntity {
     @Column(name = "special_instructions")
     private String specialInstructions;
 
+    @Column(name = "served_at")
+    private Instant servedAt;
+
+    @Column(name = "cancelled_at")
+    private Instant cancelledAt;
+
+    @Column(name = "cancellation_reason")
+    private String cancellationReason;
+
     @Column(name = "ordered_at", nullable = false)
     private Instant orderedAt;
 
@@ -210,6 +219,30 @@ public class OrderEntity {
 
     public void setOrderedAt(Instant orderedAt) {
         this.orderedAt = orderedAt;
+    }
+
+    public Instant getServedAt() {
+        return servedAt;
+    }
+
+    public void setServedAt(Instant servedAt) {
+        this.servedAt = servedAt;
+    }
+
+    public Instant getCancelledAt() {
+        return cancelledAt;
+    }
+
+    public void setCancelledAt(Instant cancelledAt) {
+        this.cancelledAt = cancelledAt;
+    }
+
+    public String getCancellationReason() {
+        return cancellationReason;
+    }
+
+    public void setCancellationReason(String cancellationReason) {
+        this.cancellationReason = cancellationReason;
     }
 
     public Instant getUpdatedAt() {

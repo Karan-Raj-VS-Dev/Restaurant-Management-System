@@ -175,4 +175,34 @@ public class PaymentEntity {
     public void setUpdatedAt(Instant updatedAt) {
         this.updatedAt = updatedAt;
     }
+
+    public static PaymentEntity create(String paymentId,
+                                       String billId,
+                                       String orderId,
+                                       String tenantId,
+                                       String propertyId,
+                                       String paymentReference,
+                                       String paymentMethod,
+                                       String paymentStatus,
+                                       BigDecimal amount,
+                                       String currencyCode,
+                                       Instant paidAt,
+                                       Instant createdAt,
+                                       Instant updatedAt) {
+        PaymentEntity entity = new PaymentEntity();
+        entity.setPaymentId(paymentId);
+        entity.setBillId(billId);
+        entity.setOrderId(orderId);
+        entity.setTenantId(tenantId);
+        entity.setPropertyId(propertyId);
+        entity.setPaymentReference(paymentReference);
+        entity.setPaymentMethod(paymentMethod);
+        entity.setPaymentStatus(paymentStatus);
+        entity.setAmount(amount);
+        entity.setCurrencyCode(currencyCode);
+        entity.setPaidAt(paidAt);
+        entity.setCreatedAt(createdAt);
+        entity.setUpdatedAt(updatedAt);
+        return entity;
+    }
 }

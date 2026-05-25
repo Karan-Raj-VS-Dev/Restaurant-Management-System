@@ -2,6 +2,8 @@ package com.restaurant.auth;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -12,6 +14,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorResponse> handleValidation(MethodArgumentNotValidException exception) {
@@ -37,6 +41,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleUnexpected(Exception exception) {
+        LOGGER.error("Unhandled auth-service exception", exception);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ApiErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 "Unexpected server error. Please try again.",
