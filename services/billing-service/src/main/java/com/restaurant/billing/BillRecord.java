@@ -5,11 +5,13 @@ import java.util.List;
 
 public record BillRecord(
         String billId,
-        String orderId,
+        String lastOrderId,
         List<String> orderIds,
         String tenantId,
         String propertyId,
         String tableId,
+        String sessionId,
+        String customerId,
         String status,
         String settlementType,
         String cancellationReason,

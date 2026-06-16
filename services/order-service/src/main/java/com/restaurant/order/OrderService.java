@@ -2,8 +2,10 @@ package com.restaurant.order;
 
 import com.restaurant.order.persistence.entity.OrderEntity;
 import com.restaurant.order.persistence.entity.OrderItemEntity;
+import com.restaurant.order.persistence.entity.OrderStatusHistoryEntity;
 import com.restaurant.order.persistence.repository.OrderItemRepository;
 import com.restaurant.order.persistence.repository.OrderRepository;
+import com.restaurant.order.persistence.repository.OrderStatusHistoryRepository;
 import com.restaurant.platform.eventing.AggregateTypes;
 import com.restaurant.platform.eventing.DomainEventPublisher;
 import com.restaurant.platform.eventing.EventEnvelopeFactory;
@@ -13,6 +15,7 @@ import com.restaurant.platform.eventing.contract.OrderLineItem;
 import com.restaurant.platform.eventing.contract.OrderSubmittedToKitchenEvent;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -31,15 +34,18 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
+    private final OrderStatusHistoryRepository orderStatusHistoryRepository;
     private final EventEnvelopeFactory eventEnvelopeFactory;
     private final DomainEventPublisher domainEventPublisher;
 
     public OrderService(OrderRepository orderRepository,
                         OrderItemRepository orderItemRepository,
+                        OrderStatusHistoryRepository orderStatusHistoryRepository,
                         EventEnvelopeFactory eventEnvelopeFactory,
                         DomainEventPublisher domainEventPublisher) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
+        this.orderStatusHistoryRepository = orderStatusHistoryRepository;
         this.eventEnvelopeFactory = eventEnvelopeFactory;
         this.domainEventPublisher = domainEventPublisher;
     }
@@ -63,20 +69,15 @@ public class OrderService {
         entity.setTenantId(tenantId);
         entity.setPropertyId(propertyId);
         entity.setTableId(request.tableId());
-        entity.setSessionId(null);
-        entity.setCustomerId(blankToNull(request.customerId()));
+        entity.setSessionId(blankToNull(request.sessionId()));
         entity.setWaiterId(request.waiterId());
         entity.setOrderType("DINE_IN");
         entity.setOrderStatus(OrderStatus.CREATED.name());
-        entity.setGuestCount(1);
-        entity.setSubtotalAmount(ZERO_AMOUNT);
-        entity.setTaxAmount(ZERO_AMOUNT);
-        entity.setDiscountAmount(ZERO_AMOUNT);
-        entity.setTotalAmount(ZERO_AMOUNT);
         entity.setSpecialInstructions(null);
         entity.setOrderedAt(now);
         entity.setUpdatedAt(now);
         orderRepository.save(entity);
+        recordStatusHistory(entity.getOrderId(), OrderStatus.CREATED, request.waiterId(), "Order created.");
 
         List<OrderItemEntity> savedItems = saveOrderItems(orderId, request.items());
         OrderResponse response = toResponse(entity, savedItems);
@@ -86,6 +87,7 @@ public class OrderService {
                 tenantId,
                 response.propertyId(),
                 response.tableId(),
+                entity.getSessionId(),
                 response.waiterId(),
                 request.customerId(),
                 response.items().stream()
@@ -111,8 +113,16 @@ public class OrderService {
         return toResponse(entity, orderItemRepository.findByOrderIdOrderByCreatedAtAsc(orderId));
     }
 
+    public OrderStatusHistoryResponse getOrderStatusHistory(String tenantId, String propertyId, String orderId) {
+        orderRepository.findByTenantIdAndPropertyIdAndOrderId(tenantId, propertyId, orderId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order was not found."));
+        OrderStatusHistoryEntity entity = orderStatusHistoryRepository.findById(orderId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order status history was not found."));
+        return toStatusHistoryResponse(entity);
+    }
+
     public OrderResponse submitToKitchen(String tenantId, String propertyId, String orderId) {
-        OrderEntity order = updateStatus(tenantId, propertyId, orderId, OrderStatus.IN_KITCHEN);
+        OrderEntity order = updateStatus(tenantId, propertyId, orderId, OrderStatus.IN_KITCHEN, null, "Submitted to kitchen.");
         List<OrderItemEntity> orderItems = orderItemRepository.findByOrderIdOrderByCreatedAtAsc(orderId);
 
         OrderSubmittedToKitchenEvent payload = new OrderSubmittedToKitchenEvent(
@@ -139,12 +149,12 @@ public class OrderService {
     }
 
     public OrderResponse markReadyToServe(String tenantId, String propertyId, String orderId) {
-        OrderEntity order = updateStatus(tenantId, propertyId, orderId, OrderStatus.READY_TO_SERVE);
+        OrderEntity order = updateStatus(tenantId, propertyId, orderId, OrderStatus.READY_TO_SERVE, null, "Kitchen marked the order ready to serve.");
         return toResponse(order, orderItemRepository.findByOrderIdOrderByCreatedAtAsc(orderId));
     }
 
     public OrderResponse markServed(String tenantId, String propertyId, String orderId) {
-        OrderEntity order = updateStatus(tenantId, propertyId, orderId, OrderStatus.SERVED);
+        OrderEntity order = updateStatus(tenantId, propertyId, orderId, OrderStatus.SERVED, null, "Order served to the customer.");
         Instant now = Instant.now();
         order.setServedAt(now);
         order.setCancelledAt(null);
@@ -156,7 +166,7 @@ public class OrderService {
     }
 
     public OrderResponse markCancelled(String tenantId, String propertyId, String orderId, CancelOrderRequest request) {
-        OrderEntity order = updateStatus(tenantId, propertyId, orderId, OrderStatus.CANCELLED);
+        OrderEntity order = updateStatus(tenantId, propertyId, orderId, OrderStatus.CANCELLED, null, request.reason().trim());
         Instant now = Instant.now();
         order.setCancelledAt(now);
         order.setServedAt(null);
@@ -167,12 +177,22 @@ public class OrderService {
         return toResponse(orderRepository.save(order), items);
     }
 
-    private OrderEntity updateStatus(String tenantId, String propertyId, String orderId, OrderStatus status) {
+    private OrderEntity updateStatus(String tenantId, String propertyId, String orderId, OrderStatus status, String changedBy, String remarks) {
         OrderEntity entity = orderRepository.findByTenantIdAndPropertyIdAndOrderId(tenantId, propertyId, orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order was not found."));
+        if (status.name().equals(entity.getOrderStatus())) {
+            return entity;
+        }
         entity.setOrderStatus(status.name());
         entity.setUpdatedAt(Instant.now());
-        return orderRepository.save(entity);
+        OrderEntity saved = orderRepository.save(entity);
+        recordStatusHistory(
+                saved.getOrderId(),
+                status,
+                changedBy == null ? saved.getWaiterId() : changedBy,
+                remarks
+        );
+        return saved;
     }
 
     private List<OrderItemEntity> saveOrderItems(String orderId, List<OrderItem> items) {
@@ -215,6 +235,29 @@ public class OrderService {
                 entity.getCancelledAt(),
                 entity.getCancellationReason()
         );
+    }
+
+    private OrderStatusHistoryResponse toStatusHistoryResponse(OrderStatusHistoryEntity entity) {
+        return new OrderStatusHistoryResponse(
+                entity.getOrderId(),
+                OrderStatus.valueOf(entity.getStatus()),
+                entity.getStatusTrail(),
+                entity.getUpdatedAt()
+        );
+    }
+
+    private void recordStatusHistory(String orderId, OrderStatus status, String changedBy, String remarks) {
+        OrderStatusHistoryEntity history = orderStatusHistoryRepository.findById(orderId)
+                .orElseGet(OrderStatusHistoryEntity::new);
+        history.setOrderId(orderId);
+        history.setStatus(status.name());
+        List<OrderStatusTrailEntry> trail = history.getStatusTrail() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(history.getStatusTrail());
+        trail.add(new OrderStatusTrailEntry(status, blankToNull(changedBy), blankToNull(remarks), Instant.now()));
+        history.setStatusTrail(trail);
+        history.setUpdatedAt(Instant.now());
+        orderStatusHistoryRepository.save(history);
     }
 
     private String blankToNull(String value) {

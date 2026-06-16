@@ -8,6 +8,7 @@ import java.util.List;
 public record CreateOrderRequest(
         @NotBlank String propertyId,
         @NotBlank String tableId,
+        String sessionId,
         @NotBlank String waiterId,
         String customerId,
         @NotEmpty List<OrderItem> items

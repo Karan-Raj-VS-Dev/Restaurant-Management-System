@@ -17,9 +17,6 @@ public class BillItemEntity {
     @Column(name = "bill_id", nullable = false, length = 64)
     private String billId;
 
-    @Column(name = "order_item_id", length = 64)
-    private String orderItemId;
-
     @Column(name = "menu_item_id", length = 64)
     private String menuItemId;
 
@@ -55,14 +52,6 @@ public class BillItemEntity {
 
     public void setBillId(String billId) {
         this.billId = billId;
-    }
-
-    public String getOrderItemId() {
-        return orderItemId;
-    }
-
-    public void setOrderItemId(String orderItemId) {
-        this.orderItemId = orderItemId;
     }
 
     public String getMenuItemId() {

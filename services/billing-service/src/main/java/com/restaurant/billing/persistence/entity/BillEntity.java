@@ -18,11 +18,8 @@ public class BillEntity {
     @Column(name = "bill_id", nullable = false, length = 64)
     private String billId;
 
-    @Column(name = "order_id", nullable = false, length = 64)
-    private String orderId;
-
-    @Column(name = "linked_order_ids", nullable = false)
-    private String linkedOrderIds;
+    @Column(name = "last_order_id", length = 64)
+    private String lastOrderId;
 
     @Column(name = "tenant_id", nullable = false, length = 64)
     private String tenantId;
@@ -32,6 +29,9 @@ public class BillEntity {
 
     @Column(name = "table_id", length = 64)
     private String tableId;
+
+    @Column(name = "session_id", length = 64)
+    private String sessionId;
 
     @Column(name = "customer_id", length = 64)
     private String customerId;
@@ -78,9 +78,6 @@ public class BillEntity {
         if (generatedAt == null) {
             generatedAt = now;
         }
-        if (linkedOrderIds == null) {
-            linkedOrderIds = orderId == null ? "" : orderId;
-        }
         if (settlementType == null) {
             settlementType = BillSettlementType.STANDARD.name();
         }
@@ -91,9 +88,6 @@ public class BillEntity {
 
     @PreUpdate
     void onUpdate() {
-        if (linkedOrderIds == null) {
-            linkedOrderIds = orderId == null ? "" : orderId;
-        }
         if (settlementType == null) {
             settlementType = BillSettlementType.STANDARD.name();
         }
@@ -110,20 +104,12 @@ public class BillEntity {
         this.billId = billId;
     }
 
-    public String getOrderId() {
-        return orderId;
+    public String getLastOrderId() {
+        return lastOrderId;
     }
 
-    public void setOrderId(String orderId) {
-        this.orderId = orderId;
-    }
-
-    public String getLinkedOrderIds() {
-        return linkedOrderIds;
-    }
-
-    public void setLinkedOrderIds(String linkedOrderIds) {
-        this.linkedOrderIds = linkedOrderIds;
+    public void setLastOrderId(String lastOrderId) {
+        this.lastOrderId = lastOrderId;
     }
 
     public String getTenantId() {
@@ -148,6 +134,14 @@ public class BillEntity {
 
     public void setTableId(String tableId) {
         this.tableId = tableId;
+    }
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
     }
 
     public String getCustomerId() {

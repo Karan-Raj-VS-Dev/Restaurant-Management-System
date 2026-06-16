@@ -2,7 +2,9 @@ package com.restaurant.billing;
 
 import com.restaurant.billing.persistence.entity.BillEntity;
 import com.restaurant.billing.persistence.entity.BillItemEntity;
+import com.restaurant.billing.persistence.entity.BillOrderEntity;
 import com.restaurant.billing.persistence.repository.BillItemRepository;
+import com.restaurant.billing.persistence.repository.BillOrderRepository;
 import com.restaurant.billing.persistence.repository.BillRepository;
 import com.restaurant.platform.eventing.contract.OrderCreatedEvent;
 import com.restaurant.platform.eventing.contract.OrderLineItem;
@@ -36,25 +38,29 @@ public class BillingStore {
 
     private final BillRepository billRepository;
     private final BillItemRepository billItemRepository;
+    private final BillOrderRepository billOrderRepository;
 
-    public BillingStore(BillRepository billRepository, BillItemRepository billItemRepository) {
+    public BillingStore(BillRepository billRepository,
+                        BillItemRepository billItemRepository,
+                        BillOrderRepository billOrderRepository) {
         this.billRepository = billRepository;
         this.billItemRepository = billItemRepository;
+        this.billOrderRepository = billOrderRepository;
     }
 
     public BillRecord createDraftFromOrder(OrderCreatedEvent event) {
         List<BillLineRecord> lines = event.items().stream()
                 .map(this::toLine)
                 .toList();
-        BillEntity existing = findActiveBillForTable(event.tenantId(), event.propertyId(), event.tableId());
+        BillEntity existing = findActiveBill(event.tenantId(), event.propertyId(), event.sessionId(), event.tableId());
         if (existing != null) {
-            return appendOrderToBill(existing, event.orderId(), lines);
+            return appendOrderToBill(existing, event.orderId(), event.sessionId(), lines);
         }
-        return createDraft("bill-" + UUID.randomUUID(), event.orderId(), event.tenantId(), event.propertyId(), event.tableId(), lines);
+        return createDraft("bill-" + UUID.randomUUID(), event.orderId(), event.tenantId(), event.propertyId(), event.tableId(), event.sessionId(), lines);
     }
 
-    public BillRecord createManualDraft(String tenantId, String propertyId, String orderId, List<BillLineRecord> lines) {
-        return createDraft("bill-" + UUID.randomUUID(), orderId, tenantId, propertyId, null, lines);
+    public BillRecord createManualDraft(String tenantId, String propertyId, String orderId, String sessionId, List<BillLineRecord> lines) {
+        return createDraft("bill-" + UUID.randomUUID(), orderId, tenantId, propertyId, null, sessionId, lines);
     }
 
     public BillRecord finalizeBill(String tenantId, String propertyId, String billId) {
@@ -64,7 +70,24 @@ public class BillingStore {
         entity.setBillingStatus("FINALIZED");
         entity.setSettlementType(BillSettlementType.STANDARD.name());
         BillEntity saved = billRepository.save(entity);
-        return toRecord(saved, billItemRepository.findByBillIdOrderByBillItemIdAsc(billId));
+        return toRecord(
+                saved,
+                billOrderRepository.findByBillIdOrderByAttachedAtAsc(billId),
+                billItemRepository.findByBillIdOrderByBillItemIdAsc(billId)
+        );
+    }
+
+    public BillRecord attachCustomer(String tenantId, String propertyId, String billId, String customerId) {
+        BillEntity entity = billRepository.findById(billId)
+                .filter(bill -> tenantId.equals(bill.getTenantId()) && propertyId.equals(bill.getPropertyId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bill was not found."));
+        entity.setCustomerId(blankToNull(customerId));
+        BillEntity saved = billRepository.save(entity);
+        return toRecord(
+                saved,
+                billOrderRepository.findByBillIdOrderByAttachedAtAsc(billId),
+                billItemRepository.findByBillIdOrderByBillItemIdAsc(billId)
+        );
     }
 
     public BillRecord finalizeCancellationBill(String tenantId, String propertyId, String billId, FinalizeCancellationBillRequest request) {
@@ -83,14 +106,22 @@ public class BillingStore {
         entity.setTotalAmount(fee);
         entity.setClosedAt(null);
         BillEntity saved = billRepository.save(entity);
-        return toRecord(saved, billItemRepository.findByBillIdOrderByBillItemIdAsc(billId));
+        return toRecord(
+                saved,
+                billOrderRepository.findByBillIdOrderByAttachedAtAsc(billId),
+                billItemRepository.findByBillIdOrderByBillItemIdAsc(billId)
+        );
     }
 
     public BillRecord getBill(String tenantId, String propertyId, String billId) {
         BillEntity entity = billRepository.findById(billId)
                 .filter(bill -> tenantId.equals(bill.getTenantId()) && propertyId.equals(bill.getPropertyId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bill was not found."));
-        return toRecord(entity, billItemRepository.findByBillIdOrderByBillItemIdAsc(billId));
+        return toRecord(
+                entity,
+                billOrderRepository.findByBillIdOrderByAttachedAtAsc(billId),
+                billItemRepository.findByBillIdOrderByBillItemIdAsc(billId)
+        );
     }
 
     public BillRecord markPaid(String billId) {
@@ -99,16 +130,27 @@ public class BillingStore {
         entity.setBillingStatus("PAID");
         entity.setClosedAt(Instant.now());
         BillEntity saved = billRepository.save(entity);
-        return toRecord(saved, billItemRepository.findByBillIdOrderByBillItemIdAsc(billId));
+        return toRecord(
+                saved,
+                billOrderRepository.findByBillIdOrderByAttachedAtAsc(billId),
+                billItemRepository.findByBillIdOrderByBillItemIdAsc(billId)
+        );
     }
 
     public List<BillRecord> listBills(String tenantId, String propertyId) {
         List<BillEntity> bills = billRepository.findByTenantIdAndPropertyIdOrderByGeneratedAtDesc(tenantId, propertyId);
+        Map<String, List<BillOrderEntity>> ordersByBillId = loadOrdersByBillId(
+                bills.stream().map(BillEntity::getBillId).toList()
+        );
         Map<String, List<BillItemEntity>> itemsByBillId = loadItemsByBillId(
                 bills.stream().map(BillEntity::getBillId).toList()
         );
         return bills.stream()
-                .map(bill -> toRecord(bill, itemsByBillId.getOrDefault(bill.getBillId(), List.of())))
+                .map(bill -> toRecord(
+                        bill,
+                        ordersByBillId.getOrDefault(bill.getBillId(), List.of()),
+                        itemsByBillId.getOrDefault(bill.getBillId(), List.of())
+                ))
                 .toList();
     }
 
@@ -118,16 +160,17 @@ public class BillingStore {
             String tenantId,
             String propertyId,
             String tableId,
+            String sessionId,
             List<BillLineRecord> items
     ) {
         BillSnapshot snapshot = summarize(items);
         BillEntity entity = new BillEntity();
         entity.setBillId(billId);
-        entity.setOrderId(orderId);
-        entity.setLinkedOrderIds(orderId);
+        entity.setLastOrderId(orderId);
         entity.setTenantId(tenantId);
         entity.setPropertyId(propertyId);
         entity.setTableId(tableId);
+        entity.setSessionId(blankToNull(sessionId));
         entity.setCustomerId(null);
         entity.setBillingStatus("DRAFT");
         entity.setSettlementType(BillSettlementType.STANDARD.name());
@@ -140,8 +183,28 @@ public class BillingStore {
         entity.setTotalAmount(snapshot.total());
         entity.setGeneratedAt(Instant.now());
         BillEntity saved = billRepository.save(entity);
+        replaceBillOrders(saved.getBillId(), List.of(orderId));
         replaceBillItems(saved.getBillId(), items);
-        return toRecord(saved, billItemRepository.findByBillIdOrderByBillItemIdAsc(saved.getBillId()));
+        return toRecord(
+                saved,
+                billOrderRepository.findByBillIdOrderByAttachedAtAsc(saved.getBillId()),
+                billItemRepository.findByBillIdOrderByBillItemIdAsc(saved.getBillId())
+        );
+    }
+
+    private BillEntity findActiveBill(String tenantId, String propertyId, String sessionId, String tableId) {
+        if (sessionId != null && !sessionId.isBlank()) {
+            BillEntity sessionBill = billRepository.findFirstByTenantIdAndPropertyIdAndSessionIdAndBillingStatusInOrderByGeneratedAtDesc(
+                    tenantId,
+                    propertyId,
+                    sessionId,
+                    ACTIVE_BILL_STATUSES
+            ).orElse(null);
+            if (sessionBill != null) {
+                return sessionBill;
+            }
+        }
+        return findActiveBillForTable(tenantId, propertyId, tableId);
     }
 
     private BillEntity findActiveBillForTable(String tenantId, String propertyId, String tableId) {
@@ -156,7 +219,7 @@ public class BillingStore {
         ).orElse(null);
     }
 
-    private BillRecord appendOrderToBill(BillEntity existing, String orderId, List<BillLineRecord> additionalLines) {
+    private BillRecord appendOrderToBill(BillEntity existing, String orderId, String sessionId, List<BillLineRecord> additionalLines) {
         List<BillLineRecord> mergedItems = mergeLineItems(
                 billItemRepository.findByBillIdOrderByBillItemIdAsc(existing.getBillId()).stream()
                         .map(this::toLineRecord)
@@ -164,12 +227,14 @@ public class BillingStore {
                 additionalLines
         );
         BillSnapshot snapshot = summarize(mergedItems);
-        List<String> orderIds = new ArrayList<>(parseOrderIds(existing.getLinkedOrderIds(), existing.getOrderId()));
+        List<String> orderIds = new ArrayList<>(loadOrderIdsForBill(existing.getBillId()));
         if (!orderIds.contains(orderId)) {
             orderIds.add(orderId);
         }
-        existing.setOrderId(orderId);
-        existing.setLinkedOrderIds(joinOrderIds(orderIds));
+        existing.setLastOrderId(orderId);
+        if (blankToNull(existing.getSessionId()) == null && blankToNull(sessionId) != null) {
+            existing.setSessionId(blankToNull(sessionId));
+        }
         existing.setBillingStatus("DRAFT");
         existing.setSettlementType(BillSettlementType.STANDARD.name());
         existing.setCancellationReason(null);
@@ -179,8 +244,31 @@ public class BillingStore {
         existing.setTotalAmount(snapshot.total());
         existing.setClosedAt(null);
         BillEntity saved = billRepository.save(existing);
+        replaceBillOrders(saved.getBillId(), orderIds);
         replaceBillItems(saved.getBillId(), mergedItems);
-        return toRecord(saved, billItemRepository.findByBillIdOrderByBillItemIdAsc(saved.getBillId()));
+        return toRecord(
+                saved,
+                billOrderRepository.findByBillIdOrderByAttachedAtAsc(saved.getBillId()),
+                billItemRepository.findByBillIdOrderByBillItemIdAsc(saved.getBillId())
+        );
+    }
+
+    private void replaceBillOrders(String billId, List<String> orderIds) {
+        billOrderRepository.deleteByBillId(billId);
+        List<BillOrderEntity> entities = orderIds.stream()
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .map(orderId -> {
+                    BillOrderEntity entity = new BillOrderEntity();
+                    entity.setBillId(billId);
+                    entity.setOrderId(orderId);
+                    return entity;
+                })
+                .toList();
+        if (!entities.isEmpty()) {
+            billOrderRepository.saveAll(entities);
+        }
     }
 
     private void replaceBillItems(String billId, List<BillLineRecord> items) {
@@ -196,7 +284,6 @@ public class BillingStore {
                     BigDecimal lineTax = lineSubtotal.multiply(DEFAULT_TAX_RATE).setScale(2, RoundingMode.HALF_UP);
                     entity.setBillItemId("bill-item-" + UUID.randomUUID());
                     entity.setBillId(billId);
-                    entity.setOrderItemId(null);
                     entity.setMenuItemId(item.itemId());
                     entity.setItemName(item.itemName());
                     entity.setQuantity(item.quantity());
@@ -217,14 +304,38 @@ public class BillingStore {
                 .collect(Collectors.groupingBy(BillItemEntity::getBillId));
     }
 
-    private BillRecord toRecord(BillEntity bill, List<BillItemEntity> items) {
+    private Map<String, List<BillOrderEntity>> loadOrdersByBillId(Collection<String> billIds) {
+        if (billIds.isEmpty()) {
+            return Map.of();
+        }
+        return billOrderRepository.findByBillIdIn(billIds).stream()
+                .collect(Collectors.groupingBy(BillOrderEntity::getBillId));
+    }
+
+    private List<String> loadOrderIdsForBill(String billId) {
+        return billOrderRepository.findByBillIdOrderByAttachedAtAsc(billId).stream()
+                .map(BillOrderEntity::getOrderId)
+                .distinct()
+                .toList();
+    }
+
+    private BillRecord toRecord(BillEntity bill, List<BillOrderEntity> billOrders, List<BillItemEntity> items) {
+        List<String> orderIds = billOrders.stream()
+                .map(BillOrderEntity::getOrderId)
+                .distinct()
+                .toList();
+        if (orderIds.isEmpty() && bill.getLastOrderId() != null && !bill.getLastOrderId().isBlank()) {
+            orderIds = List.of(bill.getLastOrderId());
+        }
         return new BillRecord(
                 bill.getBillId(),
-                bill.getOrderId(),
-                parseOrderIds(bill.getLinkedOrderIds(), bill.getOrderId()),
+                bill.getLastOrderId(),
+                orderIds,
                 bill.getTenantId(),
                 bill.getPropertyId(),
                 bill.getTableId(),
+                bill.getSessionId(),
+                bill.getCustomerId(),
                 bill.getBillingStatus(),
                 bill.getSettlementType(),
                 bill.getCancellationReason(),
@@ -271,25 +382,6 @@ public class BillingStore {
         return List.copyOf(merged.values());
     }
 
-    private List<String> parseOrderIds(String linkedOrderIds, String fallbackOrderId) {
-        if (linkedOrderIds == null || linkedOrderIds.isBlank()) {
-            return fallbackOrderId == null || fallbackOrderId.isBlank() ? List.of() : List.of(fallbackOrderId);
-        }
-        return List.of(linkedOrderIds.split(",")).stream()
-                .map(String::trim)
-                .filter(value -> !value.isBlank())
-                .distinct()
-                .toList();
-    }
-
-    private String joinOrderIds(List<String> orderIds) {
-        return orderIds.stream()
-                .map(String::trim)
-                .filter(value -> !value.isBlank())
-                .distinct()
-                .collect(Collectors.joining(","));
-    }
-
     private BillSnapshot summarize(List<BillLineRecord> items) {
         BigDecimal subtotal = items.stream()
                 .map(item -> scale(item.unitPrice()).multiply(BigDecimal.valueOf(item.quantity())))
@@ -304,6 +396,14 @@ public class BillingStore {
         return value == null
                 ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
                 : value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String blankToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private record BillSnapshot(BigDecimal subtotal, BigDecimal tax, BigDecimal total) {

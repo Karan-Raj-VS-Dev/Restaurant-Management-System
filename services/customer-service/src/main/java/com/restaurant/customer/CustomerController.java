@@ -50,6 +50,21 @@ public class CustomerController {
         );
     }
 
+    @GetMapping("/lookup")
+    public CustomerLookupResponse lookupCustomerByPhone(
+            @PathVariable(name = "tenantId", required = false) String scopedTenantId,
+            @PathVariable(name = "propertyId", required = false) String scopedPropertyId,
+            @RequestParam(name = "tenantId", required = false) String tenantId,
+            @RequestParam(name = "propertyId", required = false) String propertyId,
+            @RequestParam("phoneNumber") String phoneNumber
+    ) {
+        return customerService.lookupCustomerByPhone(
+                resolveTenantId(scopedTenantId, tenantId),
+                resolvePropertyId(scopedPropertyId, propertyId),
+                phoneNumber
+        );
+    }
+
     @PostMapping
     public CustomerResponse createCustomer(@PathVariable(name = "tenantId", required = false) String scopedTenantId,
                                            @PathVariable(name = "propertyId", required = false) String scopedPropertyId,

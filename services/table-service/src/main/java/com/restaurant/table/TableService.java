@@ -7,13 +7,18 @@ import com.restaurant.platform.eventing.EventKeys;
 import com.restaurant.platform.eventing.contract.TableAssignedEvent;
 import com.restaurant.platform.eventing.contract.TableStatusChangedEvent;
 import com.restaurant.table.persistence.entity.RestaurantTableEntity;
+import com.restaurant.table.persistence.entity.TableSessionEntity;
 import com.restaurant.table.persistence.repository.RestaurantTableRepository;
+import com.restaurant.table.persistence.repository.TableSessionRepository;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -27,13 +32,16 @@ public class TableService {
 
     private final Map<String, TableConfiguration> tables = new ConcurrentHashMap<>();
     private final RestaurantTableRepository restaurantTableRepository;
+    private final TableSessionRepository tableSessionRepository;
     private final EventEnvelopeFactory eventEnvelopeFactory;
     private final DomainEventPublisher domainEventPublisher;
 
     public TableService(RestaurantTableRepository restaurantTableRepository,
+                        TableSessionRepository tableSessionRepository,
                         EventEnvelopeFactory eventEnvelopeFactory,
                         DomainEventPublisher domainEventPublisher) {
         this.restaurantTableRepository = restaurantTableRepository;
+        this.tableSessionRepository = tableSessionRepository;
         this.eventEnvelopeFactory = eventEnvelopeFactory;
         this.domainEventPublisher = domainEventPublisher;
         seed();
@@ -77,6 +85,9 @@ public class TableService {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
                 request.active()
         );
         tables.put(key(tenantId, propertyId, tableId), configuration);
@@ -95,6 +106,9 @@ public class TableService {
                 request.sectionName(),
                 request.capacity(),
                 parseStatus(request.status()),
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -141,6 +155,18 @@ public class TableService {
             case UNAVAILABLE -> markUnavailable(current);
         };
 
+        if (updated.status() == TableStatus.OCCUPIED) {
+            TableSessionEntity session = openSessionForOccupiedTable(tenantId, propertyId, updated);
+            updated = applySessionData(updated, session);
+        } else if (current.sessionId() != null
+                || current.customerId() != null
+                || current.status() == TableStatus.OCCUPIED
+                || current.pendingStatus() == TableStatus.NEEDS_CLEANING
+                || current.pendingStatus() == TableStatus.AVAILABLE) {
+            closeOpenSessionIfPresent(tenantId, propertyId, current.tableId());
+            updated = clearSessionData(updated);
+        }
+
         tables.put(scopedKey, updated);
         persistTableConfiguration(tenantId, updated);
 
@@ -150,6 +176,28 @@ public class TableService {
         if (updated.status() != current.status()) {
             publishStatusChange(tenantId, toTableResponse(updated));
         }
+        return toTableResponse(updated);
+    }
+
+    public TableResponse attachCustomerToOpenSession(String tenantId, String propertyId, String tableId, String customerId) {
+        TableConfiguration current = syncDueTransition(tenantId, propertyId, getConfiguration(tenantId, propertyId, tableId));
+        TableSessionEntity session = findOpenSession(tenantId, propertyId, tableId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "This table does not have an open dine-in session."));
+        session.setCustomerId(blankToNull(customerId));
+        TableSessionEntity saved = tableSessionRepository.save(session);
+        TableConfiguration updated = applySessionData(current, saved);
+        tables.put(key(tenantId, propertyId, tableId), updated);
+        return toTableResponse(updated);
+    }
+
+    public TableResponse attachOrderToOpenSession(String tenantId, String propertyId, String tableId, String orderId) {
+        TableConfiguration current = syncDueTransition(tenantId, propertyId, getConfiguration(tenantId, propertyId, tableId));
+        TableSessionEntity session = findOpenSession(tenantId, propertyId, tableId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "This table does not have an open dine-in session."));
+        session.setOrderId(blankToNull(orderId));
+        TableSessionEntity saved = tableSessionRepository.save(session);
+        TableConfiguration updated = applySessionData(current, saved);
+        tables.put(key(tenantId, propertyId, tableId), updated);
         return toTableResponse(updated);
     }
 
@@ -254,6 +302,9 @@ public class TableService {
                 null,
                 null,
                 null,
+                null,
+                null,
+                current.customerId(),
                 current.active()
         );
     }
@@ -291,6 +342,9 @@ public class TableService {
                 request.reservationTime(),
                 null,
                 null,
+                null,
+                null,
+                null,
                 current.active()
         );
     }
@@ -316,6 +370,9 @@ public class TableService {
                     null,
                     null,
                     null,
+                    current.sessionId(),
+                    current.orderId(),
+                    current.customerId(),
                     current.active()
             );
         }
@@ -336,6 +393,9 @@ public class TableService {
                 current.reservationTime(),
                 TableStatus.NEEDS_CLEANING,
                 Instant.now().plus(CLEANING_DELAY),
+                current.sessionId(),
+                current.orderId(),
+                current.customerId(),
                 current.active()
         );
     }
@@ -366,6 +426,9 @@ public class TableService {
                     null,
                     TableStatus.AVAILABLE,
                     Instant.now().plus(CLEANER_READY_DELAY),
+                    current.sessionId(),
+                    current.orderId(),
+                    current.customerId(),
                     current.active()
             );
         }
@@ -381,6 +444,9 @@ public class TableService {
                 TableStatus.AVAILABLE,
                 null,
                 request.cleanerId(),
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -407,6 +473,9 @@ public class TableService {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
                 current.active()
         ), TableStatus.UNAVAILABLE);
     }
@@ -421,6 +490,9 @@ public class TableService {
                 current.sectionName(),
                 current.capacity(),
                 status,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -450,6 +522,9 @@ public class TableService {
                 current.reservationTime(),
                 current.pendingStatus(),
                 current.pendingStatusAt(),
+                current.sessionId(),
+                current.orderId(),
+                current.customerId(),
                 request.active()
         );
         if (nextStatus == TableStatus.UNAVAILABLE) {
@@ -459,18 +534,28 @@ public class TableService {
     }
 
     private List<TableConfiguration> loadScopedConfigurations(String tenantId, String propertyId) {
+        Map<String, TableSessionEntity> openSessionsByTableId = tableSessionRepository
+                .findByTenantIdAndPropertyIdAndSessionStatusOrderByStartedAtDesc(tenantId, propertyId, "OPEN")
+                .stream()
+                .collect(Collectors.toMap(
+                        TableSessionEntity::getTableId,
+                        session -> session,
+                        (left, right) -> left
+                ));
         return restaurantTableRepository.findByTenantIdAndPropertyIdAndActiveTrue(tenantId, propertyId).stream()
-                .map(entity -> mergeWithRuntime(tenantId, propertyId, entity))
+                .map(entity -> mergeWithRuntime(tenantId, propertyId, entity, openSessionsByTableId.get(entity.getTableId())))
                 .toList();
     }
 
     private TableConfiguration getConfiguration(String tenantId, String propertyId, String tableId) {
         TableConfiguration runtime = tables.get(key(tenantId, propertyId, tableId));
+        Optional<TableSessionEntity> openSession = findOpenSession(tenantId, propertyId, tableId);
         if (runtime != null) {
-            return runtime;
+            return openSession.map(session -> applySessionData(runtime, session))
+                    .orElseGet(() -> clearSessionData(runtime));
         }
         return restaurantTableRepository.findByTenantIdAndPropertyIdAndTableId(tenantId, propertyId, tableId)
-                .map(entity -> mergeWithRuntime(tenantId, propertyId, entity))
+                .map(entity -> mergeWithRuntime(tenantId, propertyId, entity, openSession.orElse(null)))
                 .orElse(new TableConfiguration(
                         tableId,
                         propertyId,
@@ -487,51 +572,60 @@ public class TableService {
                         null,
                         null,
                         null,
+                        null,
+                        null,
+                        null,
                         true
                 ));
     }
 
-    private TableConfiguration mergeWithRuntime(String tenantId, String propertyId, RestaurantTableEntity entity) {
+    private TableConfiguration mergeWithRuntime(String tenantId, String propertyId, RestaurantTableEntity entity, TableSessionEntity openSession) {
         TableConfiguration runtime = tables.get(key(tenantId, propertyId, entity.getTableId()));
         TableStatus persistedStatus = parseStatus(entity.getStatus());
-        if (runtime == null) {
-            return new TableConfiguration(
-                    entity.getTableId(),
-                    entity.getPropertyId(),
-                    entity.getTableNumber(),
-                    entity.getDisplayName() == null || entity.getDisplayName().isBlank() ? entity.getTableNumber() : entity.getDisplayName(),
-                    entity.getFloorName(),
-                    entity.getSectionName(),
-                    entity.getCapacity(),
-                    persistedStatus,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    entity.isActive()
-            );
-        }
-        return new TableConfiguration(
-                entity.getTableId(),
-                entity.getPropertyId(),
-                entity.getTableNumber(),
-                entity.getDisplayName() == null || entity.getDisplayName().isBlank() ? runtime.displayName() : entity.getDisplayName(),
-                entity.getFloorName(),
-                entity.getSectionName(),
-                entity.getCapacity(),
-                runtime.status(),
-                runtime.waiterId(),
-                runtime.cleanerId(),
-                runtime.currentPartySize(),
-                runtime.reservationPartySize(),
-                runtime.reservationTime(),
-                runtime.pendingStatus(),
-                runtime.pendingStatusAt(),
-                entity.isActive()
-        );
+        TableConfiguration merged = runtime == null
+                ? new TableConfiguration(
+                        entity.getTableId(),
+                        entity.getPropertyId(),
+                        entity.getTableNumber(),
+                        entity.getDisplayName() == null || entity.getDisplayName().isBlank() ? entity.getTableNumber() : entity.getDisplayName(),
+                        entity.getFloorName(),
+                        entity.getSectionName(),
+                        entity.getCapacity(),
+                        persistedStatus,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        entity.isActive()
+                )
+                : new TableConfiguration(
+                        entity.getTableId(),
+                        entity.getPropertyId(),
+                        entity.getTableNumber(),
+                        entity.getDisplayName() == null || entity.getDisplayName().isBlank() ? runtime.displayName() : entity.getDisplayName(),
+                        entity.getFloorName(),
+                        entity.getSectionName(),
+                        entity.getCapacity(),
+                        runtime.status(),
+                        runtime.waiterId(),
+                        runtime.cleanerId(),
+                        runtime.currentPartySize(),
+                        runtime.reservationPartySize(),
+                        runtime.reservationTime(),
+                        runtime.pendingStatus(),
+                        runtime.pendingStatusAt(),
+                        runtime.sessionId(),
+                        runtime.orderId(),
+                        runtime.customerId(),
+                        entity.isActive()
+                );
+        return openSession == null ? clearSessionData(merged) : applySessionData(merged, openSession);
     }
 
     private void persistTableConfiguration(String tenantId, TableConfiguration configuration) {
@@ -573,6 +667,9 @@ public class TableService {
                     null,
                     null,
                     null,
+                    current.sessionId(),
+                    current.orderId(),
+                    current.customerId(),
                     current.active()
             );
             case AVAILABLE -> clearRuntimeState(new TableConfiguration(
@@ -591,17 +688,112 @@ public class TableService {
                     null,
                     null,
                     null,
+                    null,
+                    null,
+                    null,
                     current.active()
             ), TableStatus.AVAILABLE);
             default -> current;
         };
 
+        if (updated.status() != TableStatus.OCCUPIED) {
+            closeOpenSessionIfPresent(tenantId, propertyId, current.tableId());
+            updated = clearSessionData(updated);
+        }
         tables.put(key(tenantId, propertyId, current.tableId()), updated);
         persistTableConfiguration(tenantId, updated);
         if (updated.status() != current.status()) {
             publishStatusChange(tenantId, toTableResponse(updated));
         }
         return updated;
+    }
+
+    private Optional<TableSessionEntity> findOpenSession(String tenantId, String propertyId, String tableId) {
+        return tableSessionRepository.findFirstByTenantIdAndPropertyIdAndTableIdAndSessionStatusOrderByStartedAtDesc(
+                tenantId,
+                propertyId,
+                tableId,
+                "OPEN"
+        );
+    }
+
+    private TableSessionEntity openSessionForOccupiedTable(String tenantId, String propertyId, TableConfiguration configuration) {
+        TableSessionEntity session = findOpenSession(tenantId, propertyId, configuration.tableId())
+                .orElseGet(TableSessionEntity::new);
+        if (session.getSessionId() == null) {
+            session.setSessionId("session-" + UUID.randomUUID());
+            session.setTenantId(tenantId);
+            session.setPropertyId(propertyId);
+            session.setTableId(configuration.tableId());
+            session.setStartedAt(Instant.now());
+        }
+        session.setSessionStatus("OPEN");
+        session.setEndedAt(null);
+        session.setAssignedWaiterId(blankToNull(configuration.waiterId()));
+        session.setCustomerCount(Objects.requireNonNullElse(configuration.currentPartySize(), 0));
+        if (blankToNull(configuration.orderId()) != null) {
+            session.setOrderId(configuration.orderId());
+        }
+        if (blankToNull(configuration.customerId()) != null) {
+            session.setCustomerId(configuration.customerId());
+        }
+        return tableSessionRepository.save(session);
+    }
+
+    private void closeOpenSessionIfPresent(String tenantId, String propertyId, String tableId) {
+        findOpenSession(tenantId, propertyId, tableId).ifPresent(session -> {
+            session.setSessionStatus("CLOSED");
+            session.setEndedAt(Instant.now());
+            tableSessionRepository.save(session);
+        });
+    }
+
+    private TableConfiguration applySessionData(TableConfiguration current, TableSessionEntity session) {
+        return new TableConfiguration(
+                current.tableId(),
+                current.propertyId(),
+                current.tableNumber(),
+                current.displayName(),
+                current.floorName(),
+                current.sectionName(),
+                current.capacity(),
+                current.status(),
+                blankToNull(session.getAssignedWaiterId()) != null ? session.getAssignedWaiterId() : current.waiterId(),
+                current.cleanerId(),
+                session.getCustomerCount() != null && session.getCustomerCount() > 0 ? session.getCustomerCount() : current.currentPartySize(),
+                current.reservationPartySize(),
+                current.reservationTime(),
+                current.pendingStatus(),
+                current.pendingStatusAt(),
+                session.getSessionId(),
+                blankToNull(session.getOrderId()),
+                blankToNull(session.getCustomerId()),
+                current.active()
+        );
+    }
+
+    private TableConfiguration clearSessionData(TableConfiguration current) {
+        return new TableConfiguration(
+                current.tableId(),
+                current.propertyId(),
+                current.tableNumber(),
+                current.displayName(),
+                current.floorName(),
+                current.sectionName(),
+                current.capacity(),
+                current.status(),
+                current.waiterId(),
+                current.cleanerId(),
+                current.currentPartySize(),
+                current.reservationPartySize(),
+                current.reservationTime(),
+                current.pendingStatus(),
+                current.pendingStatusAt(),
+                null,
+                null,
+                null,
+                current.active()
+        );
     }
 
     private String scopePrefix(String tenantId, String propertyId) {
@@ -628,7 +820,10 @@ public class TableService {
                 configuration.reservationPartySize(),
                 configuration.reservationTime(),
                 configuration.pendingStatus(),
-                configuration.pendingStatusAt()
+                configuration.pendingStatusAt(),
+                configuration.sessionId(),
+                configuration.orderId(),
+                configuration.customerId()
         );
     }
 
@@ -656,13 +851,21 @@ public class TableService {
         return value.trim().toLowerCase().replaceAll("[^a-z0-9]+", "-");
     }
 
+    private String blankToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     private void seed() {
         if (!restaurantTableRepository.findByTenantIdAndPropertyIdAndActiveTrue("bikini-bottom", "krusty-krab").isEmpty()) {
             return;
         }
-        persistTableConfiguration("bikini-bottom", new TableConfiguration("table-01", "krusty-krab", "T-01", "Window 01", "Main floor", "Dining", 4, TableStatus.AVAILABLE, null, null, null, null, null, null, null, true));
-        persistTableConfiguration("bikini-bottom", new TableConfiguration("table-02", "krusty-krab", "T-02", "Window 02", "Main floor", "Dining", 4, TableStatus.AVAILABLE, null, null, null, null, null, null, null, true));
-        persistTableConfiguration("bikini-bottom", new TableConfiguration("table-03", "krusty-krab", "T-03", "Corner 03", "Main floor", "Patio", 2, TableStatus.AVAILABLE, null, null, null, null, null, null, null, true));
+        persistTableConfiguration("bikini-bottom", new TableConfiguration("table-01", "krusty-krab", "T-01", "Window 01", "Main floor", "Dining", 4, TableStatus.AVAILABLE, null, null, null, null, null, null, null, null, null, null, true));
+        persistTableConfiguration("bikini-bottom", new TableConfiguration("table-02", "krusty-krab", "T-02", "Window 02", "Main floor", "Dining", 4, TableStatus.AVAILABLE, null, null, null, null, null, null, null, null, null, null, true));
+        persistTableConfiguration("bikini-bottom", new TableConfiguration("table-03", "krusty-krab", "T-03", "Corner 03", "Main floor", "Patio", 2, TableStatus.AVAILABLE, null, null, null, null, null, null, null, null, null, null, true));
     }
 
     private record TableConfiguration(
@@ -681,6 +884,9 @@ public class TableService {
             Instant reservationTime,
             TableStatus pendingStatus,
             Instant pendingStatusAt,
+            String sessionId,
+            String orderId,
+            String customerId,
             boolean active
     ) {
     }

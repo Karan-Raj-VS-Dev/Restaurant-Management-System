@@ -51,6 +51,25 @@ export interface TableRecord {
   reservationTime: string | null;
   pendingStatus: TableStatus | null;
   pendingStatusAt: string | null;
+  sessionId: string | null;
+  orderId: string | null;
+  customerId: string | null;
+}
+
+export interface CustomerRecord {
+  customerId: string;
+  tenantId: string;
+  propertyId: string;
+  name: string | null;
+  phoneNumber: string;
+  createdAt: string;
+}
+
+export interface CustomerLookupRecord {
+  existing: boolean;
+  customerId: string | null;
+  name: string | null;
+  phoneNumber: string;
 }
 
 export interface EmployeeRecord {
@@ -107,9 +126,11 @@ export interface OrderRecord {
 
 export interface BillRecord {
   billId: string;
-  orderId: string;
-  orderIds?: string[];
+  lastOrderId: string;
+  orderIds: string[];
   tableId: string | null;
+  sessionId: string | null;
+  customerId: string | null;
   status: BillStatus;
   settlementType: BillSettlementType;
   cancellationReason: string | null;
@@ -959,7 +980,9 @@ export async function loadKitchenSnapshot(): Promise<KitchenSnapshot> {
 
 export async function createDineInOrder(args: {
   tableId: string;
+  sessionId?: string | null;
   waiterId: string;
+  customerId?: string | null;
   items: OrderLine[];
 }) {
   const scope = getRuntimeScope();
@@ -969,10 +992,20 @@ export async function createDineInOrder(args: {
     body: JSON.stringify({
       propertyId: scope.propertyId,
       tableId: args.tableId,
+      sessionId: args.sessionId ?? null,
       waiterId: args.waiterId,
+      customerId: args.customerId ?? null,
       items: args.items
     })
   });
+
+  if (args.sessionId) {
+    await fetchJson<TableRecord>(propertyApiUrl("table", `/api/tables/${args.tableId}/session/order`), undefined, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId: order.orderId })
+    });
+  }
 
   await fetchJson<OrderRecord>(propertyApiUrl("order", `/api/orders/${order.orderId}/submit-to-kitchen`), order, {
     method: "PATCH"
@@ -1299,6 +1332,46 @@ export async function deleteManagedEmployee(employeeId: string) {
 
 export async function finalizeBill(billId: string) {
   return fetchJson<BillRecord>(propertyApiUrl("billing", `/api/bills/${billId}/finalize`), undefined, { method: "POST" });
+}
+
+export async function attachBillCustomer(billId: string, customerId: string) {
+  return fetchJson<BillRecord>(propertyApiUrl("billing", `/api/bills/${billId}/customer`), undefined, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ customerId })
+  });
+}
+
+export async function attachTableSessionCustomer(tableId: string, customerId: string) {
+  return fetchJson<TableRecord>(propertyApiUrl("table", `/api/tables/${tableId}/session/customer`), undefined, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ customerId })
+  });
+}
+
+export async function attachTableSessionOrder(tableId: string, orderId: string) {
+  return fetchJson<TableRecord>(propertyApiUrl("table", `/api/tables/${tableId}/session/order`), undefined, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ orderId })
+  });
+}
+
+export async function createCustomer(args: { name?: string | null; phoneNumber: string }) {
+  return fetchJson<CustomerRecord>(propertyApiUrl("customer", "/api/customers"), undefined, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: args.name ?? null,
+      phoneNumber: args.phoneNumber
+    })
+  });
+}
+
+export async function lookupCustomerByPhone(phoneNumber: string) {
+  const searchParams = new URLSearchParams({ phoneNumber });
+  return fetchJson<CustomerLookupRecord>(propertyApiUrl("customer", `/api/customers/lookup?${searchParams.toString()}`));
 }
 
 export async function finalizeBillCancellation(billId: string, reason: string, cancellationFee: number) {

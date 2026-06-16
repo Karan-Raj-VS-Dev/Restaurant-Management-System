@@ -5,9 +5,11 @@ import java.util.List;
 
 public record BillResponse(
         String billId,
-        String orderId,
+        String lastOrderId,
         List<String> orderIds,
         String tableId,
+        String sessionId,
+        String customerId,
         BillStatus status,
         BillSettlementType settlementType,
         String cancellationReason,

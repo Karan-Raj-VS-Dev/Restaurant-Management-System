@@ -8,6 +8,7 @@ public record OrderCreatedEvent(
         String tenantId,
         String propertyId,
         String tableId,
+        String sessionId,
         String waiterId,
         String customerId,
         List<OrderLineItem> items,

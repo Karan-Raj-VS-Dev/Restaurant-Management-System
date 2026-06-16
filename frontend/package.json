@@ -15,13 +15,21 @@
     "dev:employees": "npm run dev --workspace @restaurant/employees-ui",
     "dev:property-settings": "npm run dev --workspace @restaurant/property-settings-ui",
     "dev:reports": "npm run dev --workspace @restaurant/reports-ui",
-    "build": "npm run build --workspace @restaurant/admin-ui && npm run build --workspace @restaurant/restaurant-ui && npm run build --workspace @restaurant/pos-ui && npm run build --workspace @restaurant/kitchen-ui && npm run build --workspace @restaurant/inventory-ui && npm run build --workspace @restaurant/employees-ui && npm run build --workspace @restaurant/property-settings-ui && npm run build --workspace @restaurant/reports-ui"
+    "build": "npm run build --workspace @restaurant/admin-ui && npm run build --workspace @restaurant/restaurant-ui && npm run build --workspace @restaurant/pos-ui && npm run build --workspace @restaurant/kitchen-ui && npm run build --workspace @restaurant/inventory-ui && npm run build --workspace @restaurant/employees-ui && npm run build --workspace @restaurant/property-settings-ui && npm run build --workspace @restaurant/reports-ui",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
+    "@vitest/coverage-v8": "^4.1.8",
+    "jsdom": "^29.1.1",
     "typescript": "^5.6.3",
-    "vite": "^5.4.10"
+    "vite": "^5.4.10",
+    "vitest": "^4.1.8"
   }
 }

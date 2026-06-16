@@ -1,13 +1,17 @@
 import {
   AreaSectionSettingRecord,
+  attachBillCustomer,
+  attachTableSessionCustomer,
   BillRecord,
   buildPickupQueue,
   buildAvailabilityMap,
   cancelKitchenTicket,
   cancelOrder,
+  createCustomer,
   createDineInOrder,
   finalizeBill,
   finalizeBillCancellation,
+  lookupCustomerByPhone,
   isApiRequestError,
   loadPosSnapshot,
   markOrderServed,
@@ -86,6 +90,15 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
   const [paymentBill, setPaymentBill] = useState<BillRecord | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("UPI");
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
+  const [customerCaptureBill, setCustomerCaptureBill] = useState<BillRecord | null>(null);
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerCaptureMessage, setCustomerCaptureMessage] = useState<string | null>(null);
+  const [customerLookupStatus, setCustomerLookupStatus] = useState<"idle" | "checking" | "existing" | "new" | "error">("idle");
+  const [customerLookupName, setCustomerLookupName] = useState<string | null>(null);
+  const [customerLookupCustomerId, setCustomerLookupCustomerId] = useState<string | null>(null);
+  const [customerNameDirty, setCustomerNameDirty] = useState(false);
+  const [customerNameAutofilled, setCustomerNameAutofilled] = useState(false);
   const [cancellationBill, setCancellationBill] = useState<BillRecord | null>(null);
   const [cancellationReason, setCancellationReason] = useState("");
   const [cancellationFee, setCancellationFee] = useState("");
@@ -244,6 +257,53 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
       window.clearTimeout(clearTimer);
     };
   }, [tableStatusMessage]);
+
+  useEffect(() => {
+    if (!customerCaptureBill) {
+      setCustomerLookupStatus("idle");
+      setCustomerLookupName(null);
+      setCustomerLookupCustomerId(null);
+      return;
+    }
+
+    const normalizedPhone = customerPhone.trim();
+    if (!normalizedPhone) {
+      setCustomerLookupStatus("idle");
+      setCustomerLookupName(null);
+      setCustomerLookupCustomerId(null);
+      return;
+    }
+
+    let cancelled = false;
+    setCustomerLookupStatus("checking");
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const lookup = await lookupCustomerByPhone(normalizedPhone);
+        if (cancelled) {
+          return;
+        }
+        setCustomerLookupStatus(lookup.existing ? "existing" : "new");
+        setCustomerLookupName(lookup.name ?? null);
+        setCustomerLookupCustomerId(lookup.customerId);
+        if (lookup.existing && lookup.name && (!customerNameDirty || customerNameAutofilled)) {
+          setCustomerName(lookup.name);
+          setCustomerNameAutofilled(true);
+        }
+      } catch {
+        if (cancelled) {
+          return;
+        }
+        setCustomerLookupStatus("error");
+        setCustomerLookupName(null);
+        setCustomerLookupCustomerId(null);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [customerCaptureBill, customerPhone, customerNameDirty, customerNameAutofilled]);
 
   useEffect(() => {
     if (!selectedTable) {
@@ -421,13 +481,20 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
       setOrderAlerts([]);
       const order = await createDineInOrder({
         tableId: selectedTableId,
+        sessionId: selectedTable.sessionId,
         waiterId: selectedWaiterId,
+        customerId: selectedTable.customerId,
         items: cart
       });
+      const successMessage = `Order ${order.orderId} has been created and pushed into the kitchen flow.`;
       setCart([]);
-      setOrderNote(`Order ${order.orderId} has been created and pushed into the kitchen flow.`);
+      setOrderNote(successMessage);
       setOrderAlerts([]);
-      await refresh();
+      try {
+        await refresh();
+      } catch {
+        setOrderNote(`${successMessage} Live dashboard data could not be refreshed just now, so use "Refresh now" if the panels look stale.`);
+      }
     } catch (caughtError) {
       setOrderNote(caughtError instanceof Error ? caughtError.message : "Failed to create order.");
       setOrderAlerts([]);
@@ -449,12 +516,79 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
       return;
     }
 
+    setCustomerCaptureBill(bill);
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerCaptureMessage(null);
+    setCustomerLookupStatus("idle");
+    setCustomerLookupName(null);
+    setCustomerLookupCustomerId(null);
+    setCustomerNameDirty(false);
+    setCustomerNameAutofilled(false);
+  };
+
+  const completeBillFinalization = async (bill: BillRecord) => {
     setBusyBillId(bill.billId);
     try {
       await finalizeBill(bill.billId);
+      setCustomerCaptureBill(null);
+      setCustomerName("");
+      setCustomerPhone("");
+      setCustomerCaptureMessage(null);
+      setCustomerLookupStatus("idle");
+      setCustomerLookupName(null);
+      setCustomerLookupCustomerId(null);
+      setCustomerNameDirty(false);
+      setCustomerNameAutofilled(false);
       await refresh();
     } catch (caughtError) {
-      showTableStatusMessage(caughtError instanceof Error ? caughtError.message : "Unable to finalize the bill.");
+      setCustomerCaptureMessage(caughtError instanceof Error ? caughtError.message : "Unable to finalize the bill.");
+    } finally {
+      setBusyBillId(null);
+    }
+  };
+
+  const handleSkipCustomerCapture = async () => {
+    if (!customerCaptureBill) {
+      return;
+    }
+    await completeBillFinalization(customerCaptureBill);
+  };
+
+  const handleSaveCustomerAndFinalize = async () => {
+    if (!customerCaptureBill) {
+      return;
+    }
+
+    const normalizedPhone = customerPhone.trim();
+    if (!normalizedPhone) {
+      setCustomerCaptureMessage("Enter the customer phone number if you want to save customer details for this bill.");
+      return;
+    }
+
+    setBusyBillId(customerCaptureBill.billId);
+    try {
+      const customer = await createCustomer({
+        name: customerName.trim() || null,
+        phoneNumber: normalizedPhone
+      });
+      if (customerCaptureBill.tableId) {
+        await attachTableSessionCustomer(customerCaptureBill.tableId, customer.customerId);
+      }
+      await attachBillCustomer(customerCaptureBill.billId, customer.customerId);
+      await finalizeBill(customerCaptureBill.billId);
+      setCustomerCaptureBill(null);
+      setCustomerName("");
+      setCustomerPhone("");
+      setCustomerCaptureMessage(null);
+      setCustomerLookupStatus("idle");
+      setCustomerLookupName(null);
+      setCustomerLookupCustomerId(null);
+      setCustomerNameDirty(false);
+      setCustomerNameAutofilled(false);
+      await refresh();
+    } catch (caughtError) {
+      setCustomerCaptureMessage(caughtError instanceof Error ? caughtError.message : "Unable to save customer details for this bill.");
     } finally {
       setBusyBillId(null);
     }
@@ -802,6 +936,96 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
           </div>
         ) : null}
 
+        {customerCaptureBill ? (
+          <div className="pos-table-modal-overlay" role="presentation">
+            <div className="pos-table-modal-card" role="dialog" aria-modal="true" aria-labelledby="pos-customer-modal-title">
+              <div className="pos-table-modal-header">
+                <div>
+                  <h3 id="pos-customer-modal-title">Finalize bill</h3>
+                  <p>
+                    {(customerCaptureBill.tableId ? `${tableNameById.get(customerCaptureBill.tableId) ?? "Table"} bill` : "Walk-in bill")} · Rs {customerCaptureBill.total}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setCustomerCaptureBill(null);
+                    setCustomerName("");
+                    setCustomerPhone("");
+                    setCustomerCaptureMessage(null);
+                    setCustomerLookupStatus("idle");
+                    setCustomerLookupName(null);
+                    setCustomerLookupCustomerId(null);
+                    setCustomerNameDirty(false);
+                    setCustomerNameAutofilled(false);
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
+              <div className="pos-table-modal-content">
+                <div className="pos-table-modal-note">
+                  <strong>Customer details are optional</strong>
+                  <span>You can skip this step, or capture the customer name and phone before closing the bill.</span>
+                </div>
+                <div className="pos-cancellation-form">
+                  <label className="pos-cancellation-field">
+                    <span>Customer name (optional)</span>
+                    <input
+                      value={customerName}
+                      onChange={(event) => {
+                        setCustomerName(event.target.value);
+                        setCustomerNameDirty(true);
+                        setCustomerNameAutofilled(false);
+                      }}
+                      placeholder="Example: SpongeBob"
+                    />
+                  </label>
+                  <label className="pos-cancellation-field">
+                    <span>Phone number</span>
+                    <input
+                      value={customerPhone}
+                      onChange={(event) => {
+                        if (customerNameAutofilled && !customerNameDirty) {
+                          setCustomerName("");
+                        }
+                        setCustomerNameAutofilled(false);
+                        setCustomerLookupStatus(event.target.value.trim() ? "checking" : "idle");
+                        setCustomerLookupName(null);
+                        setCustomerLookupCustomerId(null);
+                        setCustomerPhone(event.target.value);
+                      }}
+                      placeholder="Example: +91 9876543210"
+                    />
+                    {customerLookupStatus !== "idle" ? (
+                      <small className="pos-customer-lookup-hint">
+                        {customerLookupStatus === "checking"
+                          ? "Checking customer by phone..."
+                          : customerLookupStatus === "existing"
+                            ? customerLookupName
+                              ? `Existing customer found. Name loaded from the saved record${customerLookupCustomerId ? "." : "."}`
+                              : "Existing customer found for this phone number. Add a name only if you want to update it."
+                            : customerLookupStatus === "new"
+                              ? "This phone number will be saved as a new customer."
+                              : "Unable to check this phone number right now. You can still continue."}
+                      </small>
+                    ) : null}
+                  </label>
+                </div>
+                {customerCaptureMessage ? <div className="pos-status-banner">{customerCaptureMessage}</div> : null}
+                <div className="pos-table-modal-actions">
+                  <Button variant="ghost" disabled={busyBillId === customerCaptureBill.billId} onClick={() => void handleSkipCustomerCapture()}>
+                    Skip and finalize
+                  </Button>
+                  <Button disabled={busyBillId === customerCaptureBill.billId} onClick={() => void handleSaveCustomerAndFinalize()}>
+                    Save customer and finalize
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {cancellationBill ? (
           <div className="pos-table-modal-overlay" role="presentation">
             <div className="pos-cancellation-modal" role="dialog" aria-modal="true" aria-labelledby="pos-cancellation-modal-title">
@@ -924,7 +1148,7 @@ function AuthenticatedPosDashboard(props: { session: AuthSession; dashboardConte
 }
 
 function getLinkedOrdersForBill(bill: BillRecord, orders: OrderRecord[]) {
-  const orderIds = new Set(bill.orderIds ?? [bill.orderId]);
+  const orderIds = new Set(bill.orderIds.length > 0 ? bill.orderIds : [bill.lastOrderId]);
   return orders.filter((order) => orderIds.has(order.orderId));
 }
 

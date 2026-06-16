@@ -227,7 +227,7 @@ function AuthenticatedKitchenDashboard(props: { session: AuthSession; dashboardC
               {completed.length === 0 ? (
                 <p className="kitchen-inline-note">Completed orders will appear here after service marks the ready dishes as served.</p>
               ) : (
-                <div className="kitchen-pickup-stack">
+                <div className="kitchen-pickup-stack kitchen-completed-stack">
                   {completed.map((entry) => (
                     <article
                       key={entry.ticketId}

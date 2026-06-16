@@ -7,11 +7,18 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface BillRepository extends JpaRepository<BillEntity, String> {
 
-    Optional<BillEntity> findByOrderId(String orderId);
+    Optional<BillEntity> findByLastOrderId(String lastOrderId);
 
     List<BillEntity> findByTenantIdAndPropertyIdAndBillingStatus(String tenantId, String propertyId, String billingStatus);
 
     List<BillEntity> findByTenantIdAndPropertyIdOrderByGeneratedAtDesc(String tenantId, String propertyId);
+
+    Optional<BillEntity> findFirstByTenantIdAndPropertyIdAndSessionIdAndBillingStatusInOrderByGeneratedAtDesc(
+            String tenantId,
+            String propertyId,
+            String sessionId,
+            List<String> billingStatuses
+    );
 
     Optional<BillEntity> findFirstByTenantIdAndPropertyIdAndTableIdAndBillingStatusInOrderByGeneratedAtDesc(
             String tenantId,

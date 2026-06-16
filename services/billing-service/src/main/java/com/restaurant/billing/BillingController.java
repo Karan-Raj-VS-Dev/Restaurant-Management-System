@@ -2,6 +2,7 @@ package com.restaurant.billing;
 
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -58,6 +59,21 @@ public class BillingController {
                 resolveTenantId(scopedTenantId, tenantId),
                 resolvePropertyId(scopedPropertyId, propertyId),
                 billId
+        );
+    }
+
+    @PatchMapping("/{billId}/customer")
+    public BillResponse attachCustomer(@PathVariable String billId,
+                                       @PathVariable(name = "tenantId", required = false) String scopedTenantId,
+                                       @PathVariable(name = "propertyId", required = false) String scopedPropertyId,
+                                       @RequestParam(name = "tenantId", required = false) String tenantId,
+                                       @RequestParam(name = "propertyId", required = false) String propertyId,
+                                       @Valid @RequestBody AttachBillCustomerRequest request) {
+        return billingService.attachCustomer(
+                resolveTenantId(scopedTenantId, tenantId),
+                resolvePropertyId(scopedPropertyId, propertyId),
+                billId,
+                request.customerId()
         );
     }
 

@@ -64,6 +64,20 @@ public class OrderController {
         );
     }
 
+    @GetMapping("/{orderId}/status-history")
+    public OrderStatusHistoryResponse getOrderStatusHistory(
+            @PathVariable String orderId,
+            @PathVariable(name = "tenantId", required = false) String scopedTenantId,
+            @PathVariable(name = "propertyId", required = false) String scopedPropertyId,
+            @RequestParam(name = "tenantId", required = false) String tenantId,
+            @RequestParam(name = "propertyId", required = false) String propertyId) {
+        return orderService.getOrderStatusHistory(
+                resolveTenantId(scopedTenantId, tenantId),
+                resolvePropertyId(scopedPropertyId, propertyId),
+                orderId
+        );
+    }
+
     @PatchMapping("/{orderId}/submit-to-kitchen")
     public OrderResponse submitToKitchen(@PathVariable String orderId,
                                          @PathVariable(name = "tenantId", required = false) String scopedTenantId,

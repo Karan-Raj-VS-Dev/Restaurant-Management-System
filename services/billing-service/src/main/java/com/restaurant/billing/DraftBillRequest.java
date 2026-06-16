@@ -7,6 +7,7 @@ import java.util.List;
 
 public record DraftBillRequest(
         @NotBlank String orderId,
+        String sessionId,
         @NotEmpty List<BillLine> items
 ) {
 }

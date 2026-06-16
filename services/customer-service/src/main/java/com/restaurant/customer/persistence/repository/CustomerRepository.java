@@ -7,7 +7,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CustomerRepository extends JpaRepository<CustomerEntity, String> {
 
-    List<CustomerEntity> findByTenantIdAndPropertyId(String tenantId, String propertyId);
+    List<CustomerEntity> findByTenantIdAndPropertyIdOrderByCreatedAtDesc(String tenantId, String propertyId);
 
-    Optional<CustomerEntity> findByPhoneNumber(String phoneNumber);
+    Optional<CustomerEntity> findByTenantIdAndPropertyIdAndCustomerId(String tenantId, String propertyId, String customerId);
+
+    Optional<CustomerEntity> findByTenantIdAndPropertyIdAndPhoneNumber(String tenantId, String propertyId, String phoneNumber);
 }

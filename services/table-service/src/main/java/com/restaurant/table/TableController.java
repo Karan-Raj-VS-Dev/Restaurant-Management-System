@@ -111,6 +111,36 @@ public class TableController {
         );
     }
 
+    @PatchMapping("/{tableId}/session/customer")
+    public TableResponse attachCustomerToSession(@PathVariable String tableId,
+                                                 @PathVariable(name = "tenantId", required = false) String scopedTenantId,
+                                                 @PathVariable(name = "propertyId", required = false) String scopedPropertyId,
+                                                 @RequestParam(name = "tenantId", required = false) String tenantId,
+                                                 @RequestParam(name = "propertyId", required = false) String propertyId,
+                                                 @Valid @RequestBody AttachTableCustomerRequest request) {
+        return tableService.attachCustomerToOpenSession(
+                resolveTenantId(scopedTenantId, tenantId),
+                resolvePropertyId(scopedPropertyId, propertyId),
+                tableId,
+                request.customerId()
+        );
+    }
+
+    @PatchMapping("/{tableId}/session/order")
+    public TableResponse attachOrderToSession(@PathVariable String tableId,
+                                              @PathVariable(name = "tenantId", required = false) String scopedTenantId,
+                                              @PathVariable(name = "propertyId", required = false) String scopedPropertyId,
+                                              @RequestParam(name = "tenantId", required = false) String tenantId,
+                                              @RequestParam(name = "propertyId", required = false) String propertyId,
+                                              @Valid @RequestBody AttachTableOrderRequest request) {
+        return tableService.attachOrderToOpenSession(
+                resolveTenantId(scopedTenantId, tenantId),
+                resolvePropertyId(scopedPropertyId, propertyId),
+                tableId,
+                request.orderId()
+        );
+    }
+
     @PatchMapping("/{tableId}/needs-cleaning")
     public TableResponse markNeedsCleaning(@PathVariable String tableId,
                                            @PathVariable(name = "tenantId", required = false) String scopedTenantId,

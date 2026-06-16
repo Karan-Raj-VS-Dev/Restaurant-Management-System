@@ -580,6 +580,12 @@
   font-weight: 600;
 }
 
+.pos-customer-lookup-hint {
+  font-size: 0.82rem;
+  color: var(--rm-muted);
+  line-height: 1.4;
+}
+
 .pos-cancellation-field input,
 .pos-cancellation-field textarea {
   width: 100%;

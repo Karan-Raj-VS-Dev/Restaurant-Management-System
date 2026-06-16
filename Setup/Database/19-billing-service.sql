@@ -1,10 +1,10 @@
 CREATE TABLE IF NOT EXISTS bills (
     bill_id VARCHAR(64) PRIMARY KEY,
-    order_id VARCHAR(64) NOT NULL UNIQUE,
-    linked_order_ids TEXT NOT NULL DEFAULT '',
+    last_order_id VARCHAR(64) UNIQUE,
     tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom',
     property_id VARCHAR(64) NOT NULL,
     table_id VARCHAR(64),
+    session_id VARCHAR(64),
     customer_id VARCHAR(64),
     billing_status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
     settlement_type VARCHAR(32) NOT NULL DEFAULT 'STANDARD',
@@ -20,19 +20,102 @@ CREATE TABLE IF NOT EXISTS bills (
 );
 
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom';
-ALTER TABLE bills ADD COLUMN IF NOT EXISTS linked_order_ids TEXT NOT NULL DEFAULT '';
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS settlement_type VARCHAR(32) NOT NULL DEFAULT 'STANDARD';
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancellation_fee_amount NUMERIC(12, 2) NOT NULL DEFAULT 0;
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS session_id VARCHAR(64);
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'billing'
+          AND table_name = 'bills'
+          AND column_name = 'order_id'
+    ) AND EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'billing'
+          AND table_name = 'bills'
+          AND column_name = 'last_order_id'
+    ) THEN
+        UPDATE bills
+        SET last_order_id = COALESCE(last_order_id, order_id)
+        WHERE last_order_id IS NULL;
+
+        ALTER TABLE bills
+            DROP CONSTRAINT IF EXISTS bills_order_id_key;
+
+        ALTER TABLE bills
+            DROP COLUMN order_id;
+    ELSIF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'billing'
+          AND table_name = 'bills'
+          AND column_name = 'order_id'
+    ) THEN
+
+        ALTER TABLE bills
+            DROP CONSTRAINT IF EXISTS bills_order_id_key;
+
+        ALTER TABLE bills
+            DROP CONSTRAINT IF EXISTS bills_last_order_id_key;
+
+        ALTER TABLE bills
+            RENAME COLUMN order_id TO last_order_id;
+    ELSIF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'billing'
+          AND table_name = 'bills'
+          AND column_name = 'last_order_id'
+    ) THEN
+        ALTER TABLE bills
+            ADD COLUMN last_order_id VARCHAR(64);
+    END IF;
+END $$;
 
 UPDATE bills
 SET tenant_id = 'bikini-bottom'
 WHERE tenant_id IS NULL;
 
+UPDATE billing.bills bills
+SET session_id = orders.session_id
+FROM ordering.orders orders
+WHERE bills.session_id IS NULL
+  AND bills.last_order_id = orders.order_id;
+
+UPDATE bills
+SET last_order_id = NULLIF(last_order_id, '')
+WHERE last_order_id = '';
+
+ALTER TABLE bills
+    ALTER COLUMN last_order_id DROP NOT NULL;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'bills_last_order_id_key'
+    ) THEN
+        ALTER TABLE bills
+            ADD CONSTRAINT bills_last_order_id_key UNIQUE (last_order_id);
+    END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS bill_orders (
+    bill_id VARCHAR(64) NOT NULL REFERENCES bills(bill_id) ON DELETE CASCADE,
+    order_id VARCHAR(64) NOT NULL,
+    attached_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (bill_id, order_id)
+);
+
 CREATE TABLE IF NOT EXISTS bill_items (
     bill_item_id VARCHAR(64) PRIMARY KEY,
     bill_id VARCHAR(64) NOT NULL REFERENCES bills(bill_id) ON DELETE CASCADE,
-    order_item_id VARCHAR(64),
     menu_item_id VARCHAR(64),
     item_name VARCHAR(150) NOT NULL,
     quantity INTEGER NOT NULL CHECK (quantity > 0),
@@ -40,6 +123,58 @@ CREATE TABLE IF NOT EXISTS bill_items (
     tax_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
     line_total NUMERIC(12, 2) NOT NULL CHECK (line_total >= 0)
 );
+
+ALTER TABLE bill_items
+    DROP COLUMN IF EXISTS order_item_id;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'billing'
+          AND table_name = 'bills'
+          AND column_name = 'linked_order_ids'
+    ) THEN
+        INSERT INTO bill_orders (bill_id, order_id, attached_at)
+        SELECT
+            bills.bill_id,
+            trim(linked_order_id),
+            COALESCE(bills.generated_at, NOW())
+        FROM bills,
+             unnest(string_to_array(COALESCE(bills.linked_order_ids, ''), ',')) AS linked_order_id
+        WHERE trim(linked_order_id) <> ''
+        ON CONFLICT (bill_id, order_id) DO NOTHING;
+
+        ALTER TABLE bills
+            DROP COLUMN linked_order_ids;
+    END IF;
+END $$;
+
+INSERT INTO bill_orders (bill_id, order_id, attached_at)
+SELECT
+    bill_id,
+    last_order_id,
+    COALESCE(generated_at, NOW())
+FROM bills
+WHERE last_order_id IS NOT NULL
+ON CONFLICT (bill_id, order_id) DO NOTHING;
+
+DELETE FROM bill_orders bill_orders
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM ordering.orders orders
+    WHERE orders.order_id = bill_orders.order_id
+);
+
+UPDATE bills
+SET last_order_id = NULL
+WHERE last_order_id IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1
+      FROM ordering.orders orders
+      WHERE orders.order_id = bills.last_order_id
+  );
 
 CREATE TABLE IF NOT EXISTS bill_adjustments (
     adjustment_id VARCHAR(64) PRIMARY KEY,
@@ -276,8 +411,11 @@ CREATE TABLE IF NOT EXISTS inbox_events (
 
 CREATE INDEX IF NOT EXISTS idx_bills_property_status ON bills(property_id, billing_status);
 CREATE INDEX IF NOT EXISTS idx_bills_tenant_property_status ON bills(tenant_id, property_id, billing_status);
+CREATE INDEX IF NOT EXISTS idx_bills_tenant_property_session_status ON bills(tenant_id, property_id, session_id, billing_status);
 CREATE INDEX IF NOT EXISTS idx_bills_customer_status ON bills(customer_id, billing_status);
 CREATE INDEX IF NOT EXISTS idx_bill_items_bill ON bill_items(bill_id);
+CREATE INDEX IF NOT EXISTS idx_bill_orders_bill ON bill_orders(bill_id, attached_at);
+CREATE INDEX IF NOT EXISTS idx_bill_orders_order ON bill_orders(order_id);
 CREATE INDEX IF NOT EXISTS idx_bill_adjustments_bill ON bill_adjustments(bill_id);
 CREATE INDEX IF NOT EXISTS idx_tax_definitions_scope_status ON tax_definitions(tenant_id, property_id, status);
 CREATE INDEX IF NOT EXISTS idx_billing_templates_scope_status ON billing_templates(tenant_id, property_id, status);

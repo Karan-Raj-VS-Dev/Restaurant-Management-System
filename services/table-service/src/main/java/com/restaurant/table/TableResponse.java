@@ -15,6 +15,9 @@ public record TableResponse(
         Integer reservationPartySize,
         java.time.Instant reservationTime,
         TableStatus pendingStatus,
-        java.time.Instant pendingStatusAt
+        java.time.Instant pendingStatusAt,
+        String sessionId,
+        String orderId,
+        String customerId
 ) {
 }

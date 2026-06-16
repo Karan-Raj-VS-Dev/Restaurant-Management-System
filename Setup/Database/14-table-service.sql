@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS table_sessions (
     table_id VARCHAR(64) NOT NULL REFERENCES restaurant_tables(table_id) ON DELETE CASCADE,
     tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom',
     property_id VARCHAR(64) NOT NULL,
+    order_id VARCHAR(64),
     customer_id VARCHAR(64),
     customer_count INTEGER NOT NULL DEFAULT 0 CHECK (customer_count >= 0),
     assigned_waiter_id VARCHAR(64),
@@ -30,6 +31,7 @@ CREATE TABLE IF NOT EXISTS table_sessions (
 ALTER TABLE restaurant_tables ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom';
 ALTER TABLE restaurant_tables ADD COLUMN IF NOT EXISTS display_name VARCHAR(100);
 ALTER TABLE table_sessions ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'bikini-bottom';
+ALTER TABLE table_sessions ADD COLUMN IF NOT EXISTS order_id VARCHAR(64);
 ALTER TABLE table_sessions ADD COLUMN IF NOT EXISTS customer_id VARCHAR(64);
 
 UPDATE restaurant_tables
@@ -73,5 +75,6 @@ CREATE INDEX IF NOT EXISTS idx_restaurant_tables_tenant_property_status ON resta
 CREATE INDEX IF NOT EXISTS idx_table_sessions_table_status ON table_sessions(table_id, session_status);
 CREATE INDEX IF NOT EXISTS idx_table_sessions_property_waiter ON table_sessions(property_id, assigned_waiter_id);
 CREATE INDEX IF NOT EXISTS idx_table_sessions_tenant_property_waiter ON table_sessions(tenant_id, property_id, assigned_waiter_id);
+CREATE INDEX IF NOT EXISTS idx_table_sessions_tenant_property_order ON table_sessions(tenant_id, property_id, order_id);
 CREATE INDEX IF NOT EXISTS idx_outbox_events_status_time ON outbox_events(status, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_inbox_events_status_time ON inbox_events(status, received_at);

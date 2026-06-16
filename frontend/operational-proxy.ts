@@ -1,5 +1,6 @@
 const serviceTargets = {
   auth: 9001,
+  customer: 9002,
   employee: 9003,
   property: 9004,
   table: 9005,

@@ -15,7 +15,7 @@ export function BillingRail(props: {
   return (
     <div className="pos-billing-stack">
       {props.bills.map((bill) => {
-        const linkedOrderIds = bill.orderIds ?? [bill.orderId];
+        const linkedOrderIds = bill.orderIds.length > 0 ? bill.orderIds : [bill.lastOrderId];
         const tableName = bill.tableId ? props.tableNameById.get(bill.tableId) ?? null : null;
         const title = tableName ? `${tableName} bill` : "Walk-in bill";
         return (

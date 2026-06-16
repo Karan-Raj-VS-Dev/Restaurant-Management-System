@@ -6,7 +6,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
@@ -29,9 +28,6 @@ public class OrderEntity {
     @Column(name = "session_id", length = 64)
     private String sessionId;
 
-    @Column(name = "customer_id", length = 64)
-    private String customerId;
-
     @Column(name = "waiter_id", length = 64)
     private String waiterId;
 
@@ -40,21 +36,6 @@ public class OrderEntity {
 
     @Column(name = "order_status", nullable = false, length = 32)
     private String orderStatus;
-
-    @Column(name = "guest_count", nullable = false)
-    private Integer guestCount;
-
-    @Column(name = "subtotal_amount", nullable = false, precision = 12, scale = 2)
-    private BigDecimal subtotalAmount;
-
-    @Column(name = "tax_amount", nullable = false, precision = 12, scale = 2)
-    private BigDecimal taxAmount;
-
-    @Column(name = "discount_amount", nullable = false, precision = 12, scale = 2)
-    private BigDecimal discountAmount;
-
-    @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
-    private BigDecimal totalAmount;
 
     @Column(name = "special_instructions")
     private String specialInstructions;
@@ -133,14 +114,6 @@ public class OrderEntity {
         this.sessionId = sessionId;
     }
 
-    public String getCustomerId() {
-        return customerId;
-    }
-
-    public void setCustomerId(String customerId) {
-        this.customerId = customerId;
-    }
-
     public String getWaiterId() {
         return waiterId;
     }
@@ -163,46 +136,6 @@ public class OrderEntity {
 
     public void setOrderStatus(String orderStatus) {
         this.orderStatus = orderStatus;
-    }
-
-    public Integer getGuestCount() {
-        return guestCount;
-    }
-
-    public void setGuestCount(Integer guestCount) {
-        this.guestCount = guestCount;
-    }
-
-    public BigDecimal getSubtotalAmount() {
-        return subtotalAmount;
-    }
-
-    public void setSubtotalAmount(BigDecimal subtotalAmount) {
-        this.subtotalAmount = subtotalAmount;
-    }
-
-    public BigDecimal getTaxAmount() {
-        return taxAmount;
-    }
-
-    public void setTaxAmount(BigDecimal taxAmount) {
-        this.taxAmount = taxAmount;
-    }
-
-    public BigDecimal getDiscountAmount() {
-        return discountAmount;
-    }
-
-    public void setDiscountAmount(BigDecimal discountAmount) {
-        this.discountAmount = discountAmount;
-    }
-
-    public BigDecimal getTotalAmount() {
-        return totalAmount;
-    }
-
-    public void setTotalAmount(BigDecimal totalAmount) {
-        this.totalAmount = totalAmount;
     }
 
     public String getSpecialInstructions() {

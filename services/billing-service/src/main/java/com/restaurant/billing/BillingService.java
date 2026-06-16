@@ -38,11 +38,12 @@ public class BillingService {
                 tenantId,
                 propertyId,
                 request.orderId(),
+                request.sessionId(),
                 request.items().stream()
                         .map(item -> new BillLineRecord(item.itemId(), item.itemName(), item.quantity(), item.unitPrice()))
                         .toList()
         );
-        publishDraftedEvent(bill, bill.orderId(), null);
+        publishDraftedEvent(bill, bill.lastOrderId(), null);
         return toResponse(bill);
     }
 
@@ -52,12 +53,16 @@ public class BillingService {
                 EventKeys.BILL_FINALIZED,
                 AggregateTypes.BILL,
                 bill.billId(),
-                bill.orderId(),
-                bill.orderId(),
+                bill.lastOrderId(),
+                bill.lastOrderId(),
                 null,
-                new BillFinalizedEvent(bill.billId(), bill.orderId(), bill.tenantId(), bill.propertyId(), bill.total(), Instant.now())
+                new BillFinalizedEvent(bill.billId(), bill.lastOrderId(), bill.tenantId(), bill.propertyId(), bill.total(), Instant.now())
         ));
         return toResponse(bill);
+    }
+
+    public BillResponse attachCustomer(String tenantId, String propertyId, String billId, String customerId) {
+        return toResponse(billingStore.attachCustomer(tenantId, propertyId, billId, customerId));
     }
 
     public BillResponse finalizeBillCancellation(String tenantId, String propertyId, String billId, FinalizeCancellationBillRequest request) {
@@ -66,10 +71,10 @@ public class BillingService {
                 EventKeys.BILL_FINALIZED,
                 AggregateTypes.BILL,
                 bill.billId(),
-                bill.orderId(),
-                bill.orderId(),
+                bill.lastOrderId(),
+                bill.lastOrderId(),
                 null,
-                new BillFinalizedEvent(bill.billId(), bill.orderId(), bill.tenantId(), bill.propertyId(), bill.total(), Instant.now())
+                new BillFinalizedEvent(bill.billId(), bill.lastOrderId(), bill.tenantId(), bill.propertyId(), bill.total(), Instant.now())
         ));
         return toResponse(bill);
     }
@@ -95,16 +100,18 @@ public class BillingService {
                 partitionKey,
                 partitionKey,
                 causationId,
-                new BillDraftedEvent(bill.billId(), bill.orderId(), bill.tenantId(), bill.propertyId(), bill.total(), Instant.now())
+                new BillDraftedEvent(bill.billId(), bill.lastOrderId(), bill.tenantId(), bill.propertyId(), bill.total(), Instant.now())
         ));
     }
 
     private BillResponse toResponse(BillRecord bill) {
         return new BillResponse(
                 bill.billId(),
-                bill.orderId(),
+                bill.lastOrderId(),
                 bill.orderIds(),
                 bill.tableId(),
+                bill.sessionId(),
+                bill.customerId(),
                 BillStatus.valueOf(bill.status()),
                 BillSettlementType.valueOf(bill.settlementType()),
                 bill.cancellationReason(),

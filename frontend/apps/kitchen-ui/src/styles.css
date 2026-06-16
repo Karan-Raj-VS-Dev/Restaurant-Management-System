@@ -158,6 +158,14 @@
   gap: 12px;
 }
 
+.kitchen-completed-stack {
+  max-height: min(62vh, 760px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 6px;
+}
+
 .kitchen-pickup-card {
   border-radius: 16px;
   padding: 14px;

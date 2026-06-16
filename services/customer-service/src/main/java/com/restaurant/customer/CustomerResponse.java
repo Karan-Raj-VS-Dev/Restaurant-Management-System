@@ -8,7 +8,6 @@ public record CustomerResponse(
         String propertyId,
         String name,
         String phoneNumber,
-        String email,
         Instant createdAt
 ) {
 }

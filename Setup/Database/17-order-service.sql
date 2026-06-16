@@ -4,15 +4,9 @@ CREATE TABLE IF NOT EXISTS orders (
     property_id VARCHAR(64) NOT NULL,
     table_id VARCHAR(64),
     session_id VARCHAR(64),
-    customer_id VARCHAR(64),
     waiter_id VARCHAR(64),
     order_type VARCHAR(32) NOT NULL DEFAULT 'DINE_IN',
     order_status VARCHAR(32) NOT NULL DEFAULT 'CREATED',
-    guest_count INTEGER NOT NULL DEFAULT 1 CHECK (guest_count > 0),
-    subtotal_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (subtotal_amount >= 0),
-    tax_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
-    discount_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
-    total_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
     special_instructions TEXT,
     served_at TIMESTAMPTZ,
     cancelled_at TIMESTAMPTZ,
@@ -25,6 +19,12 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAU
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS served_at TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
+ALTER TABLE orders DROP COLUMN IF EXISTS customer_id;
+ALTER TABLE orders DROP COLUMN IF EXISTS guest_count;
+ALTER TABLE orders DROP COLUMN IF EXISTS subtotal_amount;
+ALTER TABLE orders DROP COLUMN IF EXISTS tax_amount;
+ALTER TABLE orders DROP COLUMN IF EXISTS discount_amount;
+ALTER TABLE orders DROP COLUMN IF EXISTS total_amount;
 
 UPDATE orders
 SET tenant_id = 'bikini-bottom'
@@ -45,14 +45,13 @@ CREATE TABLE IF NOT EXISTS order_items (
 
 ALTER TABLE order_items DROP COLUMN IF EXISTS tax_id;
 
+DROP TABLE IF EXISTS order_status_history;
+
 CREATE TABLE IF NOT EXISTS order_status_history (
-    history_id VARCHAR(64) PRIMARY KEY,
-    order_id VARCHAR(64) NOT NULL REFERENCES orders(order_id) ON DELETE CASCADE,
-    previous_status VARCHAR(32),
-    new_status VARCHAR(32) NOT NULL,
-    changed_by VARCHAR(64),
-    remarks TEXT,
-    changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    order_id VARCHAR(64) PRIMARY KEY REFERENCES orders(order_id) ON DELETE CASCADE,
+    status VARCHAR(32) NOT NULL,
+    status_trail JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS outbox_events (
@@ -87,6 +86,6 @@ CREATE INDEX IF NOT EXISTS idx_orders_table_status ON orders(table_id, order_sta
 CREATE INDEX IF NOT EXISTS idx_orders_waiter_ordered_at ON orders(waiter_id, ordered_at);
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_order_items_menu_item ON order_items(menu_item_id);
-CREATE INDEX IF NOT EXISTS idx_order_status_history_order_time ON order_status_history(order_id, changed_at);
+CREATE INDEX IF NOT EXISTS idx_order_status_history_updated_at ON order_status_history(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_outbox_events_status_time ON outbox_events(status, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_inbox_events_status_time ON inbox_events(status, received_at);
