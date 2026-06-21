@@ -72,4 +72,53 @@ class PropertyAreaSectionSettingsServiceTest {
                 .extracting(AreaSectionSettingResponse::waiterNames, AreaSectionSettingResponse::cleanerNames)
                 .containsExactly(List.of("Neha", "Anu"), List.of("Pradeep"));
     }
+
+    @Test
+    void updateExistingAreaSectionClearsBlankNamesIntoEmptyLists() {
+        PropertyAreaSectionEntity entity = new PropertyAreaSectionEntity();
+        entity.setAreaSectionId("main-floor__patio");
+        entity.setTenantId("bikini-bottom");
+        entity.setPropertyId("krusty-krab");
+        entity.setFloorName("Main floor");
+        entity.setSectionName("Patio");
+        entity.setMaxTableCount(6);
+        entity.setWaiterNames("Karthi");
+        entity.setCleanerNames("Suresh");
+        entity.setStatus("ACTIVE");
+
+        when(propertyAreaSectionRepository.findByTenantIdAndPropertyIdAndAreaSectionId("bikini-bottom", "krusty-krab", "main-floor__patio"))
+                .thenReturn(Optional.of(entity));
+        when(propertyAreaSectionRepository.save(any(PropertyAreaSectionEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AreaSectionSettingResponse response = service.update(
+                "bikini-bottom",
+                "krusty-krab",
+                "main-floor__patio",
+                new UpsertAreaSectionSettingRequest("Main floor", "Patio", 8, List.of("  ", ""), List.of(), "INACTIVE")
+        );
+
+        assertThat(entity.getMaxTableCount()).isEqualTo(8);
+        assertThat(entity.getWaiterNames()).isEmpty();
+        assertThat(entity.getCleanerNames()).isEmpty();
+        assertThat(entity.getStatus()).isEqualTo("INACTIVE");
+        assertThat(response.waiterNames()).isEmpty();
+        assertThat(response.cleanerNames()).isEmpty();
+    }
+
+    @Test
+    void seedDefaultsSkipsExistingAreaAndSavesOnlyMissingDefaults() {
+        when(propertyAreaSectionRepository.existsByTenantIdAndPropertyIdAndAreaSectionId("bikini-bottom", "krusty-krab", "main-floor__dining"))
+                .thenReturn(true);
+        when(propertyAreaSectionRepository.existsByTenantIdAndPropertyIdAndAreaSectionId("bikini-bottom", "krusty-krab", "main-floor__patio"))
+                .thenReturn(false);
+        when(propertyAreaSectionRepository.save(any(PropertyAreaSectionEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.seedDefaults();
+
+        ArgumentCaptor<PropertyAreaSectionEntity> captor = ArgumentCaptor.forClass(PropertyAreaSectionEntity.class);
+        verify(propertyAreaSectionRepository).save(captor.capture());
+        assertThat(captor.getValue().getAreaSectionId()).isEqualTo("main-floor__patio");
+        verify(propertyAreaSectionRepository).existsByTenantIdAndPropertyIdAndAreaSectionId("bikini-bottom", "krusty-krab", "main-floor__dining");
+        verify(propertyAreaSectionRepository).existsByTenantIdAndPropertyIdAndAreaSectionId("bikini-bottom", "krusty-krab", "main-floor__patio");
+    }
 }

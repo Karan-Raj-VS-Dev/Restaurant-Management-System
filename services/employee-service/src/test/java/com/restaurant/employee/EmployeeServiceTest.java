@@ -156,6 +156,37 @@ class EmployeeServiceTest {
     }
 
     @Test
+    void createEmployeeRejectsNegativeSalary() {
+        assertThatThrownBy(() -> employeeService.createEmployee(
+                "bikini-bottom",
+                "krusty-krab",
+                new CreateEmployeeRequest(
+                        "John Walker",
+                        EmployeeRole.WAITER,
+                        null,
+                        null,
+                        null,
+                        BigDecimal.valueOf(-10),
+                        true,
+                        "ACTIVE"
+                )
+        )).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Salary cannot be negative");
+    }
+
+    @Test
+    void listEmployeesFallsBackToWaiterRoleForUnknownStoredRoleCode() {
+        when(employeeRepository.findByTenantIdAndPropertyIdOrderByFullNameAsc("bikini-bottom", "krusty-krab"))
+                .thenReturn(List.of(employeeEntity("emp-001", "Mystery User", "UNKNOWN_ROLE", true)));
+
+        List<EmployeeResponse> responses = employeeService.listEmployees("bikini-bottom", "krusty-krab");
+
+        assertThat(responses).singleElement()
+                .extracting(EmployeeResponse::role)
+                .isEqualTo(EmployeeRole.WAITER);
+    }
+
+    @Test
     void getEmployeeThrowsWhenEmployeeIsMissing() {
         when(employeeRepository.findByTenantIdAndPropertyIdAndEmployeeId("bikini-bottom", "krusty-krab", "missing"))
                 .thenReturn(Optional.empty());

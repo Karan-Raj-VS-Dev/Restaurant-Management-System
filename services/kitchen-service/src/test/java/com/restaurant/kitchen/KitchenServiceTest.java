@@ -1,6 +1,7 @@
 package com.restaurant.kitchen;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class KitchenServiceTest {
@@ -159,5 +161,100 @@ class KitchenServiceTest {
         assertThat(response.cancellationReason()).isEqualTo("Customer left");
         assertThat(itemsByTicketId.get(ticketId)).extracting(KitchenTicketItemEntity::getPrepStatus)
                 .containsExactly(KitchenStatus.CANCELLED.name());
+    }
+
+    @Test
+    void createTicketForExistingOrderUpdatesAssignedCookWithoutDuplicatingItems() {
+        kitchenService.createTicketForOrder(new OrderSubmittedToKitchenEvent(
+                "order-001",
+                "bikini-bottom",
+                "krusty-krab",
+                "table-01",
+                "emp-001",
+                List.of(new OrderLineItem("item-001", "Margherita Pizza", 1)),
+                Instant.parse("2026-06-15T10:00:00Z")
+        ), "cause-001");
+        String ticketId = ticketsById.keySet().iterator().next();
+
+        KitchenTicketResponse response = kitchenService.createTicket(
+                "bikini-bottom",
+                "krusty-krab",
+                new CreateKitchenTicketRequest("order-001", "krusty-krab", "cook-009")
+        );
+
+        assertThat(response.ticketId()).isEqualTo(ticketId);
+        assertThat(ticketsById).hasSize(1);
+        assertThat(ticketsById.get(ticketId).getAssignedCookId()).isEqualTo("cook-009");
+        assertThat(itemsByTicketId.get(ticketId)).hasSize(1);
+    }
+
+    @Test
+    void markReusedRequiresTargetTicketId() {
+        kitchenService.createTicketForOrder(new OrderSubmittedToKitchenEvent(
+                "order-001",
+                "bikini-bottom",
+                "krusty-krab",
+                "table-01",
+                "emp-001",
+                List.of(new OrderLineItem("item-001", "Margherita Pizza", 1)),
+                Instant.parse("2026-06-15T10:00:00Z")
+        ), "cause-001");
+        String ticketId = ticketsById.keySet().iterator().next();
+
+        assertThatThrownBy(() -> kitchenService.markReused(
+                "bikini-bottom",
+                "krusty-krab",
+                ticketId,
+                new UpdateKitchenTicketRequest("cook-001", null, "   ")
+        )).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Choose the new order that should reuse this dish.");
+    }
+
+    @Test
+    void markReusedMovesCancelledSourceIntoTargetReadyState() {
+        kitchenService.createTicketForOrder(new OrderSubmittedToKitchenEvent(
+                "order-001",
+                "bikini-bottom",
+                "krusty-krab",
+                "table-01",
+                "emp-001",
+                List.of(new OrderLineItem("item-001", "Margherita Pizza", 1)),
+                Instant.parse("2026-06-15T10:00:00Z")
+        ), "cause-001");
+        kitchenService.createTicketForOrder(new OrderSubmittedToKitchenEvent(
+                "order-002",
+                "bikini-bottom",
+                "krusty-krab",
+                "table-02",
+                "emp-002",
+                List.of(new OrderLineItem("item-002", "Pasta Alfredo", 1)),
+                Instant.parse("2026-06-15T10:03:00Z")
+        ), "cause-002");
+
+        List<String> ticketIds = List.copyOf(ticketsById.keySet());
+        String sourceTicketId = ticketIds.get(0);
+        String targetTicketId = ticketIds.get(1);
+
+        kitchenService.markCancelled(
+                "bikini-bottom",
+                "krusty-krab",
+                sourceTicketId,
+                new UpdateKitchenTicketRequest("cook-001", "Customer cancelled", null)
+        );
+
+        KitchenTicketResponse response = kitchenService.markReused(
+                "bikini-bottom",
+                "krusty-krab",
+                sourceTicketId,
+                new UpdateKitchenTicketRequest(null, null, targetTicketId)
+        );
+
+        assertThat(response.status()).isEqualTo(KitchenStatus.REUSED);
+        assertThat(response.reusedForTicketId()).isEqualTo(targetTicketId);
+        assertThat(ticketsById.get(targetTicketId).getTicketStatus()).isEqualTo(KitchenStatus.READY.name());
+        assertThat(itemsByTicketId.get(sourceTicketId)).extracting(KitchenTicketItemEntity::getPrepStatus)
+                .containsExactly(KitchenStatus.REUSED.name());
+        assertThat(itemsByTicketId.get(targetTicketId)).extracting(KitchenTicketItemEntity::getPrepStatus)
+                .containsExactly(KitchenStatus.READY.name());
     }
 }
